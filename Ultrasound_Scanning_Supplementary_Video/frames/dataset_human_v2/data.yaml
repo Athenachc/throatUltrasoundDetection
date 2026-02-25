@@ -1,0 +1,10 @@
+# Train and Val paths (relative to this file or absolute)
+path: /home/athena/Ultrasound_videos/Ultrasound_Scanning_Supplementary_Video/frames/dataset_human_v2  # root directory of your data
+train: train/images
+val: train/images  # For now, use train as val if you don't have a separate split
+
+# Class Names
+names:
+  0: shadow
+  1: cartilage
+  2: TC
