@@ -30,3 +30,4 @@ human_test_results/Process_Data/Data_P_Human_Throat_US/selected_images/human_dat
 human_test_results/Process_Data/Data_P_Human_Throat_US/selected_images/human_data_label_v3/obj.names
 human_test_results/data_collect-1215/weq/20251215170436/Thumbs.db
 .gitignore
+Ultrasound_Scanning_Supplementary_Video/frames/yolo26n.pt
