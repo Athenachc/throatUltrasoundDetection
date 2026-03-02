@@ -19,7 +19,8 @@ try:
     GlobalHydra.instance().clear()
     initialize(config_path=".", version_base=None)
 
-    yolo_path = "./runs/detect/train2/weights/best.pt" # train2 for phantom data, train3 for human data
+    # train2 for phantom data, train3 for human data
+    yolo_path = "./runs/detect/train2/weights/best.pt" 
     sam2_checkpoint = "/home/athena/sam2/checkpoints/sam2.1_hiera_large.pt"
     model_cfg_name = "sam2.1_hiera_l"
 
@@ -31,13 +32,13 @@ except Exception as e:
     sys.exit()
 
 # --- 2. DYNAMIC PATH HANDLING ---
-video_input = "/home/athena/Ultrasound_videos/Ultrasound_Scanning_Supplementary_Video/crop/RL_PPO3_zoom_v2.mp4"
+video_input = "/home/athena/Ultrasound_videos/Ultrasound_Scanning_Supplementary_Video/crop/Smooth_Scan_zoom_v3.mp4"
 base_name = os.path.splitext(os.path.basename(video_input))[0]
-output_video_path = f"{base_name}_roi.mp4"
-csv_file = f"{base_name}_roi.csv"
+output_video_path = f"{base_name}_roi_no_tc.mp4"
+csv_file = f"{base_name}_roi_no_tc.csv"
 
-# Fixed Pool for CSV columns
-BOUNDARY_NAMES_ALL = ["TC", "CC"] + [f"T{i}" for i in range(1, 14)]
+# Fixed Pool for CSV columns - TC REMOVED
+BOUNDARY_NAMES_ALL = ["CC"] + [f"T{i}" for i in range(1, 15)]
 
 # --- 3. LOGGING FUNCTION ---
 def log_to_csv(frame_idx, total_roi, roi_dict):
@@ -61,9 +62,7 @@ total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
 
 out = cv2.VideoWriter(output_video_path, cv2.VideoWriter_fourcc(*'mp4v'), fps, (width, height))
 
-
-
-print(f"Processing with Spatial Anchoring: {video_input}")
+print(f"Processing (CC + T-series only): {video_input}")
 
 frame_count = 0
 while cap.isOpened():
@@ -78,27 +77,24 @@ while cap.isOpened():
     total_frame_roi = 0
     
     if len(boxes) > 0:
-        # Sort ALL boxes from Left-to-Right by their center X to determine territory
+        # Sort ALL boxes from Left-to-Right by their center X
         centers_x = (boxes[:, 0] + boxes[:, 2]) / 2
         sorted_indices = np.argsort(centers_x)
         sorted_boxes = boxes[sorted_indices]
         sorted_centers_x = centers_x[sorted_indices]
 
-        # Logic to assign names based on territories
+        # Logic to assign names (TC Removed, starting from CC)
         box_names = []
         t_counter = 1
-        tc_assigned = False
         cc_assigned = False
 
         for cx in sorted_centers_x:
-            if cx < 500 and not tc_assigned:
-                box_names.append("TC")
-                tc_assigned = True
-            elif 500 <= cx < 800 and not cc_assigned:
+            # We treat the first object in the clinical territory (< 800) as CC
+            if cx < 500 and not cc_assigned:
                 box_names.append("CC")
                 cc_assigned = True
             else:
-                # If it's > 800, or if TC/CC territories were skipped/already filled
+                # All subsequent objects are T1, T2, etc.
                 box_names.append(f"T{t_counter}")
                 t_counter += 1
 
@@ -111,7 +107,7 @@ while cap.isOpened():
             name = box_names[i]
             x1, y1, x2, y2 = sorted_boxes[i].astype(int)
             
-            # Mask Constraint
+            # Mask Constraint logic
             box_constraint = np.zeros(mask.shape, dtype=bool)
             box_constraint[y1:y2, x1:x2] = True
             constrained_mask = np.logical_and(mask > 0, box_constraint)
@@ -128,7 +124,6 @@ while cap.isOpened():
                     
                     cv2.drawContours(frame_bgr, [largest_cnt], -1, (0, 255, 0), 2)
                     
-                    # Centroid Labeling
                     M = cv2.moments(largest_cnt)
                     if M["m00"] != 0:
                         cx_label = int(M["m10"] / M["m00"])
@@ -142,7 +137,6 @@ while cap.isOpened():
     frame_count += 1
     if frame_count % 20 == 0:
         print(f"Progress: {frame_count}/{total_frames} frames...", end="\r")
-        # Periodically clear cache to prevent buildup
         torch.cuda.empty_cache()
 
 cap.release()
