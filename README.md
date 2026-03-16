@@ -12,5 +12,5 @@ Prerequisities
 4. Use SAM2 to draw the boundaries with [yolo_sam2_video_roi_naming_v2.py](https://github.com/Athenachc/throatUltrasoundDetection/blob/main/Ultrasound_Scanning_Supplementary_Video/frames/yolo_sam2_video_roi_naming_v2.py).
    
 ## Human Data Detection
-1. Repeat above Steps 1-3 with corresponding datasets and files locations to prepare YOLO detection. (Here *[train3](https://github.com/Athenachc/throatUltrasoundDetection/tree/main/Ultrasound_Scanning_Supplementary_Video/frames/runs/detect/train3)* for human data)
+1. Repeat above Steps 1-3 with corresponding datasets and files locations to prepare YOLO detection. (Here *[train3](https://github.com/Athenachc/throatUltrasoundDetection/tree/main/Ultrasound_Scanning_Supplementary_Video/frames/runs/detect/train3)* for human data.)
 2. Use SAM2 to draw the boundaries with [yolo_sam2_video_human.py](https://github.com/Athenachc/throatUltrasoundDetection/blob/main/Ultrasound_Scanning_Supplementary_Video/frames/yolo_sam2_video_human.py).
