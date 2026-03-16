@@ -8,7 +8,7 @@ Prerequisities
 ## Phantom Data Detection
 1. Prepare a dataset with labelling for YOLO. [CVAT](https://www.cvat.ai) is suggested.
 2. Train YOLO with [train.py](https://github.com/Athenachc/throatUltrasoundDetection/blob/main/Ultrasound_Scanning_Supplementary_Video/frames/train.py). The YOLO weights will be saved automatically. 
-3. Test YOLO results with [test_video.py](https://github.com/Athenachc/throatUltrasoundDetection/tree/main/frames/test_video.py) or [test_image.py](https://github.com/Athenachc/throatUltrasoundDetection/tree/main/frames/test_image.py). Remember to indicate the correct location of the desired YOLO weights.
+3. Test YOLO results with [test_video.py](https://github.com/Athenachc/throatUltrasoundDetection/blob/main/Ultrasound_Scanning_Supplementary_Video/frames/test_video.py) or [test_image.py](https://github.com/Athenachc/throatUltrasoundDetection/blob/main/Ultrasound_Scanning_Supplementary_Video/frames/test_image.py). Remember to indicate the correct location of the desired YOLO weights.
 4. Use SAM2 to draw the boundaries with [yolo_sam2_video_roi_naming_v2.py](https://github.com/Athenachc/throatUltrasoundDetection/tree/main/frames/yolo_sam2_video_roi_naming_v2.py).
    
 ## Human Data Detection
