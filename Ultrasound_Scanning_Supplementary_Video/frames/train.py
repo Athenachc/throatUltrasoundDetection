@@ -12,7 +12,10 @@ def main():
 
     # 2. Load the model
     print("Loading YOLOv8 Nano model...")
-    model = YOLO("yolov8n.pt") 
+    model = YOLO("yolov8n.pt") # Current baseline
+    # model = YOLO("yolov8s.pt")   # Small (more accurate than nano)
+    # model = YOLO("yolo11n.pt")   # Latest version
+    # model = YOLO("yolov10n.pt")  # NMS-free stability
 
     # 3. Start Training
     print("Starting training...")
