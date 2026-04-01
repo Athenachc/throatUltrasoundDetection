@@ -19,7 +19,9 @@ try:
     GlobalHydra.instance().clear()
     initialize(config_path=".", version_base=None)
 
-    # train2 for phantom data, train3 for human data
+    # train2 for phantom data, train3 for human data (YOLOv8 nano)
+    # train6 for phantom data,train5 for human data (yolo11n)
+    # train7 for phantom data,train8 for human data (yolov10n)
     yolo_path = "./runs/detect/train2/weights/best.pt" 
     sam2_checkpoint = "/home/athena/sam2/checkpoints/sam2.1_hiera_large.pt"
     model_cfg_name = "sam2.1_hiera_l"
