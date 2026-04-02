@@ -19,8 +19,10 @@ print("Initializing Models...")
 try:
     GlobalHydra.instance().clear()
     initialize(config_path=".", version_base=None)
-
-    yolo_path = "./runs/detect/train3/weights/best.pt" 
+    # train2 for phantom data, train3 for human data (YOLOv8 nano)
+    # train6 for phantom data,train5 for human data (yolo11n)
+    # train7 for phantom data,train8 for human data (yolov10n)
+    yolo_path = "./runs/detect/train5/weights/best.pt" 
     sam2_checkpoint = "/home/athena/sam2/checkpoints/sam2.1_hiera_large.pt"
     model_cfg_name = "sam2.1_hiera_l"
 
@@ -32,7 +34,7 @@ except Exception as e:
     sys.exit()
 
 # --- 2. PATHS & VIDEO CONFIG ---
-video_input = "/home/athena/Ultrasound_videos/human_test_results/0930-cuhk-002/cgl/20250930123155/20250930123155.mp4"
+video_input = "/home/athena/Ultrasound_videos/human_test_results/Process_Data/Data_P_Human_Throat_US/ywc/filtered/20250930121012/20250930121012_shortlisted_v2.mp4"
 if not os.path.exists(video_input):
     print(f"Error: Video not found at {video_input}")
     sys.exit()
