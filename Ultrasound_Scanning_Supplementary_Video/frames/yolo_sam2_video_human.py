@@ -22,7 +22,8 @@ try:
     # train2 for phantom data, train3 for human data (YOLOv8 nano)
     # train6 for phantom data,train5 for human data (yolo11n)
     # train7 for phantom data,train8 for human data (yolov10n)
-    yolo_path = "./runs/detect/train5/weights/best.pt" 
+    # train9 for online_human data (yolov8n))
+    yolo_path = "./runs/detect/train9/weights/best.pt" 
     sam2_checkpoint = "/home/athena/sam2/checkpoints/sam2.1_hiera_large.pt"
     model_cfg_name = "sam2.1_hiera_l"
 
@@ -34,7 +35,7 @@ except Exception as e:
     sys.exit()
 
 # --- 2. PATHS & VIDEO CONFIG ---
-video_input = "/home/athena/Ultrasound_videos/human_test_results/Process_Data/Data_P_Human_Throat_US/ywc/filtered/20250930121012/20250930121012_shortlisted_v2.mp4"
+video_input = "/home/athena/Ultrasound_videos/online_videos/video6.mp4"
 if not os.path.exists(video_input):
     print(f"Error: Video not found at {video_input}")
     sys.exit()
@@ -42,8 +43,6 @@ if not os.path.exists(video_input):
 base_name = os.path.splitext(os.path.basename(video_input))[0]
 output_video_path = f"{base_name}_roi.mp4"
 csv_file = f"{base_name}_roi.csv"
-
-# Fixed Pool for CSV columns
 BOUNDARY_NAMES_ALL = ["TC", "CC"] + [f"T{i}" for i in range(1, 15)]
 
 # --- 3. LOGGING FUNCTION ---
@@ -54,7 +53,6 @@ def log_to_csv(frame_idx, total_roi, roi_dict):
         if not file_exists:
             header = ["Frame Index", "Total ROI (px)"] + BOUNDARY_NAMES_ALL
             writer.writerow(header)
-        
         row = [frame_idx, total_roi]
         for name in BOUNDARY_NAMES_ALL:
             row.append(roi_dict.get(name, 0))
@@ -65,12 +63,11 @@ cap = cv2.VideoCapture(video_input)
 fps = cap.get(cv2.CAP_PROP_FPS)
 width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
 height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT)) # Fixed: Defined variable here
+total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
 
 out = cv2.VideoWriter(output_video_path, cv2.VideoWriter_fourcc(*'mp4v'), fps, (width, height))
 
 print(f"Processing: {video_input}")
-print(f"Logic: Cartilages are CC then T1... if TC exists, else they are all T1...")
 
 frame_count = 0
 with torch.inference_mode():
@@ -87,24 +84,50 @@ with torch.inference_mode():
         total_frame_roi = 0
         
         if len(boxes) > 0:
-            # Separate TC (Shadow anchor) and Cartilages (Class 1)
-            tc_indices = [i for i, cid in enumerate(class_ids) if cid in [0, 2] and (boxes[i][0] + boxes[i][2])/2 < 500]
-            cart_indices = [i for i, cid in enumerate(class_ids) if cid == 1]
-            
             final_names = [None] * len(boxes)
             
-            # Step 1: Identify TC (Leftmost shadow)
+            # Step 1: Find all TC candidates (Class 0 or 2)
+            tc_indices = [i for i, cid in enumerate(class_ids) if cid in [0, 2]]
+            cart_indices = [i for i, cid in enumerate(class_ids) if cid == 1]
+            
+            tc_side = None # 'left' or 'right'
             has_tc = False
+
             if tc_indices:
-                tc_idx = tc_indices[np.argmin((boxes[tc_indices, 0] + boxes[tc_indices, 2]) / 2)]
-                final_names[tc_idx] = "TC"
+                # Calculate centers
+                centers_x = (boxes[tc_indices, 0] + boxes[tc_indices, 2]) / 2
+                
+                # Distance to left (x=0) and right (x=width)
+                dist_to_left = centers_x 
+                dist_to_right = width - centers_x
+                
+                # Find the single index that is closest to ANY edge
+                min_left_idx = np.argmin(dist_to_left)
+                min_right_idx = np.argmin(dist_to_right)
+                
+                if dist_to_left[min_left_idx] < dist_to_right[min_right_idx]:
+                    best_tc_idx = tc_indices[min_left_idx]
+                    tc_side = 'left'
+                else:
+                    best_tc_idx = tc_indices[min_right_idx]
+                    tc_side = 'right'
+                
+                final_names[best_tc_idx] = "TC"
                 has_tc = True
 
-            # Step 2: Identify Cartilages (CC and T-series)
+            # Step 2: Label Cartilages based on TC position
             if cart_indices:
                 c_boxes = boxes[cart_indices]
                 c_centers_x = (c_boxes[:, 0] + c_boxes[:, 2]) / 2
-                c_sort_idx = np.argsort(c_centers_x)
+                
+                # If TC is on right, CC is the rightmost cartilage. If TC is on left, CC is leftmost.
+                # Sorting logic:
+                if tc_side == 'right':
+                    # Sort Cartilages Right to Left (Descending X)
+                    c_sort_idx = np.argsort(c_centers_x)[::-1]
+                else:
+                    # Sort Cartilages Left to Right (Ascending X - Default for TC on left or no TC)
+                    c_sort_idx = np.argsort(c_centers_x)
                 
                 t_counter = 1
                 for i, idx in enumerate(c_sort_idx):
@@ -115,7 +138,7 @@ with torch.inference_mode():
                         final_names[actual_idx] = f"T{t_counter}"
                         t_counter += 1
 
-            # Step 3: Segment all with SAM2
+            # Step 3: SAM2 Segmentation
             predictor.set_image(image_rgb)
             masks, _, _ = predictor.predict(box=boxes, multimask_output=False)
             if masks.ndim == 4: masks = masks.squeeze(1)
@@ -127,7 +150,6 @@ with torch.inference_mode():
                 mask_np = mask.cpu().numpy() if torch.is_tensor(mask) else mask
                 x1, y1, x2, y2 = boxes[i].astype(int)
                 
-                # Spatial Constraint
                 box_mask = np.zeros(mask_np.shape, dtype=bool)
                 box_mask[y1:y2, x1:x2] = True
                 mask_uint8 = (np.logical_and(mask_np > 0, box_mask)).astype(np.uint8) * 255
@@ -140,7 +162,6 @@ with torch.inference_mode():
                         roi_dict[name] = area
                         total_frame_roi += area
                         
-                        # TC is Green, others (CC, T1...) are Blue
                         color = (0, 255, 0) if name == "TC" else (255, 0, 0)
                         cv2.drawContours(frame_bgr, [largest_cnt], -1, color, 2)
                         
