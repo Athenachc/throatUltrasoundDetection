@@ -22,8 +22,9 @@ try:
     # train2 for phantom data, train3 for human data (YOLOv8 nano)
     # train6 for phantom data,train5 for human data (yolo11n)
     # train7 for phantom data,train8 for human data (yolov10n)
-    # train9 for online_human data (yolov8n))
-    # train10 from online_human data (yolov10n))
+    # train9 for online_human data (yolov8n)
+    # train10 from online_human data (yolov10n)
+    # train11 from online_human data (yolo11n)
     yolo_path = "./runs/detect/train9/weights/best.pt" 
     sam2_checkpoint = "/home/athena/sam2/checkpoints/sam2.1_hiera_large.pt"
     model_cfg_name = "sam2.1_hiera_l"
