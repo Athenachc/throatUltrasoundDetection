@@ -43,17 +43,21 @@ def run_benchmark(model_path, video_path):
     cap.release()
     
     # --- Calculate Final Metrics ---
-    avg_latency = np.mean(latencies)
-    fps = 1000 / avg_latency
-    stability_score = np.std(roi_areas) # Lower is more stable/less flickering
+    avg_latency = np.mean(latencies) if latencies else 0
+    fps = 1000 / avg_latency if avg_latency > 0 else 0
+    stability_score = np.std(roi_areas) if len(roi_areas) > 1 else float('nan')
     
     return {
-        "Model": model_path.split('/')[-1],
+        "Video": video_name,
+        "Model": model_name,
         "Avg Latency (ms)": round(avg_latency, 2),
         "FPS": round(fps, 1),
         "VRAM (MB)": round(vram_used, 2),
         "Stability (StdDev)": round(stability_score, 2)
     }
+
+video_folder = "/home/athena/Ultrasound_videos/online_videos/"
+video_files = glob(os.path.join(video_folder, "*.mp4"))
 
 # Example of running it for all your models
 # train2 for phantom data, train3 for human data (YOLOv8 nano)
@@ -71,11 +75,51 @@ models_to_test = [
     "./runs/detect/train5/weights/best.pt"  # v11n (with human data)
 ]
 
-results_table = []
-for m in models_to_test:
-    results_table.append(run_benchmark(m, "/home/athena/Ultrasound_videos/human_test_results/Process_Data/Data_P_Human_Throat_US/ywc/filtered/20250930121841/20250930121841_shortlisted_v2.mp4"))
 
-# Print comparison
-print(f"{'Model':<20} | {'FPS':<6} | {'Latency':<8} | {'VRAM':<8} | {'Stability'}")
-for r in results_table:
-    print(f"{r['Model']:<20} | {r['FPS']:<6} | {r['Avg Latency (ms)']:<8} | {r['VRAM (MB)']:<8} | {r['Stability (StdDev)']}")
+
+# ------------------------- test single video -------------------------
+# results_table = []
+# for m in models_to_test:
+#     results_table.append(run_benchmark(m, "/home/athena/Ultrasound_videos/human_test_results/Process_Data/Data_P_Human_Throat_US/ywc/filtered/20250930121841/20250930121841_shortlisted_v2.mp4"))
+#     # results_table.append(run_benchmark(m, "/home/athena/Ultrasound_videos/online_videos/video2.mp4"))
+
+# # Print comparison
+# print(f"{'Model':<20} | {'FPS':<6} | {'Latency':<8} | {'VRAM':<8} | {'Stability'}")
+# for r in results_table:
+#     print(f"{r['Model']:<20} | {r['FPS']:<6} | {r['Avg Latency (ms)']:<8} | {r['VRAM (MB)']:<8} | {r['Stability (StdDev)']}")
+
+
+# ------------------------- test all videos in a folder-------------------------
+all_results = []
+
+print(f"Found {len(video_files)} videos in {video_folder}")
+print("-" * 80)
+
+for video_path in video_files:
+    print(f"\n>>> Processing Video: {os.path.basename(video_path)}")
+    print(f"{'Model':<15} | {'FPS':<6} | {'Latency':<8} | {'Stability'}")
+    
+    for model_path in models_to_test:
+        res = run_benchmark(model_path, video_path)
+        all_results.append(res)
+        
+        # Print individual model result for the current video
+        print(f"{res['Model']:<15} | {res['FPS']:<6} | {res['Avg Latency (ms)']:<8} | {res['Stability (StdDev)']}")
+
+# --- FINAL SUMMARY ---
+print("\n" + "="*30 + " FINAL SUMMARY " + "="*30)
+# Grouping by model to see average performance across all videos
+model_performance = {}
+for r in all_results:
+    m = r['Model']
+    if m not in model_performance:
+        model_performance[m] = {"stability": [], "fps": []}
+    if not np.isnan(r['Stability (StdDev)']):
+        model_performance[m]["stability"].append(r['Stability (StdDev)'])
+    model_performance[m]["fps"].append(r['FPS'])
+
+print(f"{'Model':<15} | {'Mean FPS':<10} | {'Mean Stability'}")
+for m, metrics in model_performance.items():
+    mean_fps = round(np.mean(metrics["fps"]), 1)
+    mean_stab = round(np.mean(metrics["stability"]), 2) if metrics["stability"] else "N/A"
+    print(f"{m:<15} | {mean_fps:<10} | {mean_stab}")
