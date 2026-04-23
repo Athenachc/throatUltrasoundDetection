@@ -60,8 +60,12 @@ def run_benchmark(model_path, video_path):
 # train6 for phantom data,train5 for human data (yolo11n)
 # train7 for phantom data,train8 for human data (yolov10n)
 # train9 for online_human data (yolov8n))
+# train10 from online_human data (yolov10n)
+# train11 from online_human data (yolo11n)
 models_to_test = [
     "./runs/detect/train9/weights/best.pt", # v8n (with online human data)
+    "./runs/detect/train10/weights/best.pt", # v10n (with online human data)
+    "./runs/detect/train11/weights/best.pt", # v11n (with online human data)
     "./runs/detect/train3/weights/best.pt", # v8n (with human data)
     "./runs/detect/train8/weights/best.pt", # v10n (with human data)
     "./runs/detect/train5/weights/best.pt"  # v11n (with human data)
