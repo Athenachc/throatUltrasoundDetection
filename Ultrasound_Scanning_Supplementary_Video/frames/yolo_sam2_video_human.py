@@ -23,6 +23,7 @@ try:
     # train6 for phantom data,train5 for human data (yolo11n)
     # train7 for phantom data,train8 for human data (yolov10n)
     # train9 for online_human data (yolov8n))
+    # train10 from online_human data (yolov10n))
     yolo_path = "./runs/detect/train9/weights/best.pt" 
     sam2_checkpoint = "/home/athena/sam2/checkpoints/sam2.1_hiera_large.pt"
     model_cfg_name = "sam2.1_hiera_l"
@@ -35,7 +36,7 @@ except Exception as e:
     sys.exit()
 
 # --- 2. PATHS & VIDEO CONFIG ---
-video_input = "/home/athena/Ultrasound_videos/online_videos/video6.mp4"
+video_input = "/home/athena/Ultrasound_videos/online_videos/video7.mp4"
 if not os.path.exists(video_input):
     print(f"Error: Video not found at {video_input}")
     sys.exit()
