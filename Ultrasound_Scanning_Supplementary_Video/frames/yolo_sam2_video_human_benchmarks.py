@@ -3,55 +3,55 @@ import torch
 import numpy as np
 import cv2
 import os
+import csv
 from glob import glob
 from ultralytics import YOLO
 
 def run_benchmark(model_path, video_path):
-    # 1. Load Model
+    # Fix: Define these at the start so they are always available for the return dict
+    video_name = os.path.basename(video_path)
+    model_name = os.path.basename(model_path)
+    
     device = "cuda" if torch.cuda.is_available() else "cpu"
+    # Load model
     model = YOLO(model_path).to(device)
     
-    # 2. Track VRAM (after model is loaded)
-    vram_used = torch.cuda.memory_allocated(device) / (1024**2) # Convert to MB
+    # Track VRAM
+    vram_used = torch.cuda.memory_allocated(device) / (1024**2) 
     
     cap = cv2.VideoCapture(video_path)
     latencies = []
     roi_areas = []
     
-    print(f"Benchmarking: {model_path}")
+    print(f"Benchmarking: {model_name} on {video_name}")
     
     while cap.isOpened():
         ret, frame = cap.read()
         if not ret: break
         
-        # --- Start Timer ---
         start_time = time.perf_counter()
-        
-        # Run Inference
         results = model.predict(frame, conf=0.5, verbose=False)[0]
-        
-        # --- End Timer ---
         end_time = time.perf_counter()
+        
         latency_ms = (end_time - start_time) * 1000
         latencies.append(latency_ms)
         
-        # Track ROI for Stability (Example: Class 0)
         if len(results.boxes) > 0:
-            # Using box area as a proxy for stability in this example
+            # Track the first box's area for stability
             box = results.boxes.xywh[0]
             area = box[2] * box[3]
             roi_areas.append(area.item())
 
     cap.release()
     
-    # --- Calculate Final Metrics ---
+    # Calculate Metrics
     avg_latency = np.mean(latencies) if latencies else 0
     fps = 1000 / avg_latency if avg_latency > 0 else 0
     stability_score = np.std(roi_areas) if len(roi_areas) > 1 else float('nan')
     
     return {
         "Video": video_name,
-        "Model": model_name,
+        "Model": model_path.split('/')[-3],  # Shows 'train9', 'train10', etc.
         "Avg Latency (ms)": round(avg_latency, 2),
         "FPS": round(fps, 1),
         "VRAM (MB)": round(vram_used, 2),
@@ -59,7 +59,7 @@ def run_benchmark(model_path, video_path):
     }
 
 video_folder = "/home/athena/Ultrasound_videos/online_videos/"
-video_files = glob(os.path.join(video_folder, "*.mp4"))
+video_files = sorted(glob(os.path.join(video_folder, "*.mp4")))
 
 # Example of running it for all your models
 # train2 for phantom data, train3 for human data (YOLOv8 nano)
@@ -93,35 +93,44 @@ models_to_test = [
 
 # ------------------------- test all videos in a folder-------------------------
 all_results = []
+csv_output = "benchmark_results.csv"
 
-print(f"Found {len(video_files)} videos in {video_folder}")
-print("-" * 80)
+print(f"Found {len(video_files)} videos. Starting benchmarks...")
 
 for video_path in video_files:
-    print(f"\n>>> Processing Video: {os.path.basename(video_path)}")
-    print(f"{'Model':<15} | {'FPS':<6} | {'Latency':<8} | {'Stability'}")
+    v_name = os.path.basename(video_path)
+    print(f"\n>>> Video: {v_name}")
+    print(f"{'Model':<10} | {'FPS':<6} | {'Lat (ms)':<8} | {'Stability'}")
     
     for model_path in models_to_test:
-        res = run_benchmark(model_path, video_path)
-        all_results.append(res)
-        
-        # Print individual model result for the current video
-        print(f"{res['Model']:<15} | {res['FPS']:<6} | {res['Avg Latency (ms)']:<8} | {res['Stability (StdDev)']}")
+        try:
+            res = run_benchmark(model_path, video_path)
+            all_results.append(res)
+            print(f"{res['Model']:<10} | {res['FPS']:<6} | {res['Avg Latency (ms)']:<8} | {res['Stability (StdDev)']}")
+        except Exception as e:
+            print(f"Error testing {model_path} on {v_name}: {e}")
+
+# --- SAVE TO CSV ---
+if all_results:
+    keys = all_results[0].keys()
+    with open(csv_output, 'w', newline='') as f:
+        dict_writer = csv.DictWriter(f, fieldnames=keys)
+        dict_writer.writeheader()
+        dict_writer.writerows(all_results)
+    print(f"\nDetailed results saved to: {csv_output}")
 
 # --- FINAL SUMMARY ---
-print("\n" + "="*30 + " FINAL SUMMARY " + "="*30)
-# Grouping by model to see average performance across all videos
-model_performance = {}
+print("\n" + "="*20 + " OVERALL MODEL AVERAGES " + "="*20)
+summary = {}
 for r in all_results:
     m = r['Model']
-    if m not in model_performance:
-        model_performance[m] = {"stability": [], "fps": []}
+    if m not in summary: summary[m] = {"s": [], "f": []}
     if not np.isnan(r['Stability (StdDev)']):
-        model_performance[m]["stability"].append(r['Stability (StdDev)'])
-    model_performance[m]["fps"].append(r['FPS'])
+        summary[m]["s"].append(r['Stability (StdDev)'])
+    summary[m]["f"].append(r['FPS'])
 
-print(f"{'Model':<15} | {'Mean FPS':<10} | {'Mean Stability'}")
-for m, metrics in model_performance.items():
-    mean_fps = round(np.mean(metrics["fps"]), 1)
-    mean_stab = round(np.mean(metrics["stability"]), 2) if metrics["stability"] else "N/A"
-    print(f"{m:<15} | {mean_fps:<10} | {mean_stab}")
+print(f"{'Model':<10} | {'Avg FPS':<8} | {'Avg Stability'}")
+for m, data in summary.items():
+    m_fps = np.mean(data["f"]) if data["f"] else 0
+    m_stab = np.mean(data["s"]) if data["s"] else float('nan')
+    print(f"{m:<10} | {m_fps:<8.1f} | {m_stab:.2f}")
