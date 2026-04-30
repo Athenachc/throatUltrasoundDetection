@@ -1,37 +1,29 @@
-import os
 from pathlib import Path
 
-def list_jpg_in_remote_folder(target_folder_path):
-    # Convert to a Path object for easier handling
+def list_ground_truth_filenames(target_folder_path):
     folder = Path(target_folder_path).resolve()
     
-    # Check if the folder exists
     if not folder.is_dir():
-        print(f"Error: The folder '{target_folder_path}' was not found.")
+        print(f"Error: Folder '{target_folder_path}' not found.")
         return
 
-    # Use the folder's name for the .txt file
-    folder_name = folder.name
-    output_path = folder / f"{folder_name}.txt"
+    # Updated naming convention based on your previous preference
+    output_filename = f"{folder.name}_shortlisted.txt"
+    output_path = folder / output_filename
 
-    # Find all .jpg and .jpeg files (case-insensitive)
-    jpg_extensions = ('.jpg', '.jpeg', '.JPG', '.JPEG')
-    jpg_files = [f.name for f in folder.iterdir() if f.suffix in jpg_extensions]
-    
-    # Sort them alphabetically
-    jpg_files.sort()
+    # Capture all common image extensions
+    valid_extensions = ('.jpg', '.jpeg', '.png', '.JPG', '.PNG')
+    img_files = [f.name for f in folder.iterdir() if f.suffix in valid_extensions]
+    img_files.sort()
 
-    # Write the list to the text file inside that folder
     try:
         with open(output_path, 'w', encoding='utf-8') as f:
-            for filename in jpg_files:
+            for filename in img_files:
                 f.write(filename + '\n')
-        print(f"Done! Created '{output_path}' with {len(jpg_files)} filenames.")
+        print(f"Success! {len(img_files)} files listed in: {output_path}")
     except Exception as e:
-        print(f"An error occurred while saving: {e}")
+        print(f"Save failed: {e}")
 
-# PASTE YOUR FOLDER PATH HERE
-# Example: r'C:\Users\Name\Desktop\Shortlisted' or '/Users/Name/Pictures/Project'
-my_path = r'/home/athena/Ultrasound_videos/human_test_results/Process_Data/Data_P_Human_Throat_US/cgl/filtered/20250930122939'  # <-- Change this to your folder path
-
-list_jpg_in_remote_folder(my_path)
+# Target GT folder
+my_path = r'/home/athena/Ultrasound_videos/Ultrasound_Scanning_Supplementary_Video/frames/online_human_selected_GT_label/SegmentationClass/'
+list_ground_truth_filenames(my_path)
