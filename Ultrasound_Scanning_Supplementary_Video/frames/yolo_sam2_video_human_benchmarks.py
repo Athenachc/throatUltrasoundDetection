@@ -66,28 +66,44 @@ def save_visual_comparison(frame_rgb, gt_mask, model_masks_dict, model_labels_di
     bw_gt[gt_mask > 0] = [255, 255, 255] 
     ax_gt.imshow(bw_gt)
     
+    # Process GT labels
     num_labels, labels_im, stats, centroids = cv2.connectedComponentsWithStats(gt_mask)
     if num_labels > 1:
-        valid_centroids = centroids[1:]
-        sorted_indices = np.argsort(valid_centroids[:, 0])
+        # Sort components by area to find TC (usually the largest)
+        # components are [background, comp1, comp2...]
+        comp_indices = np.argsort(stats[1:, cv2.CC_STAT_AREA])[::-1] + 1 
+        
+        tc_idx = comp_indices[0] # Largest is TC
+        other_indices = comp_indices[1:]
+        
+        # Sort "others" by x-coordinate for CC/T ordering
+        if len(other_indices) > 0:
+            other_centroids = centroids[other_indices]
+            x_sorted_sub_indices = np.argsort(other_centroids[:, 0])
+            other_indices = other_indices[x_sorted_sub_indices]
+
+        # Draw TC Label
+        ax_gt.text(centroids[tc_idx][0], centroids[tc_idx][1] + 60, "TC", color='cyan', 
+                   fontsize=10, fontweight='bold', ha='center', 
+                   bbox=dict(facecolor='black', alpha=0.8, pad=1))
+        
+        # Draw CC and T labels
         t_count = 1
-        for i, idx in enumerate(sorted_indices):
-            cx, cy = int(valid_centroids[idx][0]), int(valid_centroids[idx][1])
-            gt_lbl = "TC" if i == 0 else ("CC" if i == 1 else f"T{t_count}")
-            if i > 1: t_count += 1
+        for i, idx in enumerate(other_indices):
+            cx, cy = centroids[idx]
+            gt_lbl = "CC" if i == 0 else f"T{t_count}"
+            if i > 0: t_count += 1
             ax_gt.text(cx, cy + 35, gt_lbl, color='cyan', fontsize=10, fontweight='bold', 
                        ha='center', bbox=dict(facecolor='black', alpha=0.8, pad=1))
+            
     ax_gt.set_title("Ground Truth (B&W)")
     ax_gt.axis('off')
 
-    # 3. Model Panels (Colored + Labeled)
+    # 3. Model Panels
     def plot_with_labels(ax, m_id, title):
         ax.imshow(frame_rgb)
         if m_id in model_masks_dict and model_masks_dict[m_id] is not None:
-            mask_overlay = model_masks_dict[m_id]
-            if mask_overlay.shape[-1] == 4:
-                ax.imshow(mask_overlay)
-            
+            ax.imshow(model_masks_dict[m_id])
             if m_id in model_labels_dict:
                 for label, coords in model_labels_dict[m_id]:
                     ax.text(coords[0], coords[1] + 35, label, color='white', fontsize=11, 
@@ -116,8 +132,6 @@ def run_hybrid_benchmark(yolo_paths, sam2_predictor, video_path, gt_folder):
     all_gt_paths = glob(os.path.join(gt_folder, f"{v_base_name}_*.png"))
     target_frames = {int(re.search(r'_(\d+)\.png$', p).group(1)): p for p in all_gt_paths if re.search(r'_(\d+)\.png$', p)}
     
-    # Global stats for this video
-    video_stats = []
     accumulated_metrics = {os.path.basename(os.path.dirname(os.path.dirname(p))): {"latencies":[], "dice":[], "tp":[]} for p in yolo_paths}
 
     for frame_idx in sorted(target_frames.keys()):
@@ -137,14 +151,12 @@ def run_hybrid_benchmark(yolo_paths, sam2_predictor, video_path, gt_folder):
         frame_masks = {}
         frame_labels = {}
 
-        # Process each YOLO model sequentially for this frame
         for yolo_p in yolo_paths:
             m_id = yolo_p.split('/')[-3]
             model = YOLO(yolo_p).to("cuda")
             
             start_time = time.perf_counter()
             results = model.predict(frame, conf=0.5, verbose=False)[0]
-            
             boxes = results.boxes.xyxy.cpu().numpy()
             class_ids = results.boxes.cls.cpu().numpy().astype(int)
             
@@ -157,14 +169,16 @@ def run_hybrid_benchmark(yolo_paths, sam2_predictor, video_path, gt_folder):
                 tc_indices = [i for i, cid in enumerate(class_ids) if cid in [0, 2]]
                 cart_indices = [i for i, cid in enumerate(class_ids) if cid == 1]
                 
-                tc_side = 'left'
+                sam2_predictor.set_image(frame_rgb)
+                
+                # REVISED LOGIC: Only 1 TC allowed, CC only if TC exists
                 if tc_indices:
+                    # Pick the TC closest to center/edges based on prior logic
                     cx_vals = (boxes[tc_indices, 0] + boxes[tc_indices, 2]) / 2
                     best_tc_idx = tc_indices[np.argmin(np.minimum(cx_vals, width - cx_vals))]
                     tc_side = 'left' if cx_vals[np.argmin(np.minimum(cx_vals, width - cx_vals))] < width/2 else 'right'
                     
-                    # SAM2 for TC
-                    sam2_predictor.set_image(frame_rgb)
+                    # Segment TC
                     m, _, _ = sam2_predictor.predict(box=boxes[best_tc_idx], multimask_output=False)
                     tc_m = m[0].astype(np.uint8)
                     bin_mask = np.maximum(bin_mask, tc_m)
@@ -173,33 +187,46 @@ def run_hybrid_benchmark(yolo_paths, sam2_predictor, video_path, gt_folder):
                     
                     if gt_box and calculate_iou(boxes[best_tc_idx], gt_box) >= 0.5: is_tp = 1
 
-                if cart_indices:
-                    cc_x = (boxes[cart_indices, 0] + boxes[cart_indices, 2]) / 2
-                    s_idx = np.argsort(cc_x)[::-1] if tc_side == 'right' else np.argsort(cc_x)
-                    t_cnt = 1
-                    for i, idx in enumerate(s_idx):
-                        act_idx = cart_indices[idx]
-                        m, _, _ = sam2_predictor.predict(box=boxes[act_idx], multimask_output=False)
-                        inst_m = m[0].astype(np.uint8)
-                        bin_mask = np.maximum(bin_mask, inst_m)
+                    # If TC exists, the first cartilage is CC
+                    if cart_indices:
+                        cc_x = (boxes[cart_indices, 0] + boxes[cart_indices, 2]) / 2
+                        s_idx = np.argsort(cc_x)[::-1] if tc_side == 'right' else np.argsort(cc_x)
                         
-                        curr_lbl = "CC" if i == 0 else "T"
-                        vis_mask[inst_m > 0] = COLOR_MAP[curr_lbl]
-                        display_lbl = "CC" if i == 0 else f"T{t_cnt}"
-                        lbl_coords.append((display_lbl, (int((boxes[act_idx][0]+boxes[act_idx][2])/2), int(boxes[act_idx][3]))))
-                        if i > 0: t_cnt += 1
+                        t_cnt = 1
+                        for i, idx in enumerate(s_idx):
+                            act_idx = cart_indices[idx]
+                            m, _, _ = sam2_predictor.predict(box=boxes[act_idx], multimask_output=False)
+                            inst_m = m[0].astype(np.uint8)
+                            bin_mask = np.maximum(bin_mask, inst_m)
+                            
+                            if i == 0:
+                                vis_mask[inst_m > 0] = COLOR_MAP["CC"]
+                                lbl_coords.append(("CC", (int((boxes[act_idx][0]+boxes[act_idx][2])/2), int(boxes[act_idx][3]))))
+                            else:
+                                vis_mask[inst_m > 0] = COLOR_MAP["T"]
+                                lbl_coords.append((f"T{t_cnt}", (int((boxes[act_idx][0]+boxes[act_idx][2])/2), int(boxes[act_idx][3]))))
+                                t_cnt += 1
+                else:
+                    # NO TC: All cartilages are T1, T2...
+                    if cart_indices:
+                        cc_x = (boxes[cart_indices, 0] + boxes[cart_indices, 2]) / 2
+                        s_idx = np.argsort(cc_x) # Default left-to-right
+                        for i, idx in enumerate(s_idx):
+                            act_idx = cart_indices[idx]
+                            m, _, _ = sam2_predictor.predict(box=boxes[act_idx], multimask_output=False)
+                            inst_m = m[0].astype(np.uint8)
+                            bin_mask = np.maximum(bin_mask, inst_m)
+                            vis_mask[inst_m > 0] = COLOR_MAP["T"]
+                            lbl_coords.append((f"T{i+1}", (int((boxes[act_idx][0]+boxes[act_idx][2])/2), int(boxes[act_idx][3]))))
 
             accumulated_metrics[m_id]["latencies"].append((time.perf_counter() - start_time)*1000)
             accumulated_metrics[m_id]["dice"].append(dc(bin_mask, gt_mask))
             accumulated_metrics[m_id]["tp"].append(is_tp)
-            
             frame_masks[m_id] = vis_mask
             frame_labels[m_id] = lbl_coords
-            
             del model
             torch.cuda.empty_cache()
 
-        print(f"  --> Frame {frame_idx:05d} benchmarked for all models.", end='\r')
         save_visual_comparison(frame_rgb, gt_mask, frame_masks, frame_labels, v_base_name, frame_idx)
 
     cap.release()
@@ -216,12 +243,9 @@ if __name__ == "__main__":
 
     all_results = []
     for vp in sorted(glob(os.path.join(video_folder, "*.mp4"))):
-        try:
-            all_results.extend(run_hybrid_benchmark(yolo_models_list, sam2_predictor, vp, gt_folder))
-        except Exception as e:
-            print(f"\n[ERROR] {vp}: {e}")
+        all_results.extend(run_hybrid_benchmark(yolo_models_list, sam2_predictor, vp, gt_folder))
 
     if all_results:
         df = pd.DataFrame(all_results)
         df.to_csv("hybrid_benchmark_results.csv", index=False)
-        print("\n" + "="*50 + "\nFINAL SUMMARY\n" + str(df.groupby('Model').mean(numeric_only=True)) + "\n" + "="*50)
+        print("\nSUMMARY:\n", df.groupby('Model').mean(numeric_only=True))
