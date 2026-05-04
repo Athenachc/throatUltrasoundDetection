@@ -82,31 +82,54 @@ def save_visual_comparison(frame_rgb, gt_mask, model_masks_dict, model_labels_di
             x_sorted_sub_indices = np.argsort(other_centroids[:, 0])
             other_indices = other_indices[x_sorted_sub_indices]
 
+        def get_label_y(idx):
+            return stats[idx, cv2.CC_STAT_TOP] + stats[idx, cv2.CC_STAT_HEIGHT] + 25
+
         # Draw TC Label
-        ax_gt.text(centroids[tc_idx][0], centroids[tc_idx][1] + 60, "TC", color='cyan', 
+        # ax_gt.text(centroids[tc_idx][0], centroids[tc_idx][1] + 60, "TC", color='cyan', 
+        #            fontsize=10, fontweight='bold', ha='center', 
+        #            bbox=dict(facecolor='black', alpha=0.8, pad=1))
+        ax_gt.text(centroids[tc_idx][0], get_label_y(tc_idx), "TC", color='cyan', 
                    fontsize=10, fontweight='bold', ha='center', 
                    bbox=dict(facecolor='black', alpha=0.8, pad=1))
         
         # Draw CC and T labels
         t_count = 1
+        # for i, idx in enumerate(other_indices):
+        #     cx, cy = centroids[idx]
+        #     gt_lbl = "CC" if i == 0 else f"T{t_count}"
+        #     if i > 0: t_count += 1
+        #     ax_gt.text(cx, cy + 35, gt_lbl, color='cyan', fontsize=10, fontweight='bold', 
+        #                ha='center', bbox=dict(facecolor='black', alpha=0.8, pad=1))
+
         for i, idx in enumerate(other_indices):
-            cx, cy = centroids[idx]
+            cx = centroids[idx][0]
             gt_lbl = "CC" if i == 0 else f"T{t_count}"
             if i > 0: t_count += 1
-            ax_gt.text(cx, cy + 35, gt_lbl, color='cyan', fontsize=10, fontweight='bold', 
+            ax_gt.text(cx, get_label_y(idx), gt_lbl, color='cyan', fontsize=10, fontweight='bold', 
                        ha='center', bbox=dict(facecolor='black', alpha=0.8, pad=1))
-            
+
     ax_gt.set_title("Ground Truth (B&W)")
     ax_gt.axis('off')
 
     # 3. Model Panels
+    # def plot_with_labels(ax, m_id, title):
+    #     ax.imshow(frame_rgb)
+    #     if m_id in model_masks_dict and model_masks_dict[m_id] is not None:
+    #         ax.imshow(model_masks_dict[m_id])
+    #         if m_id in model_labels_dict:
+    #             for label, coords in model_labels_dict[m_id]:
+    #                 ax.text(coords[0], coords[1] + 35, label, color='white', fontsize=11, 
+    #                         fontweight='bold', ha='center',
+    #                         bbox=dict(facecolor='black', alpha=0.9, pad=0.5))
     def plot_with_labels(ax, m_id, title):
         ax.imshow(frame_rgb)
         if m_id in model_masks_dict and model_masks_dict[m_id] is not None:
             ax.imshow(model_masks_dict[m_id])
             if m_id in model_labels_dict:
                 for label, coords in model_labels_dict[m_id]:
-                    ax.text(coords[0], coords[1] + 35, label, color='white', fontsize=11, 
+                    # Also slightly lowered model labels for consistency
+                    ax.text(coords[0], coords[1] + 45, label, color='white', fontsize=11, 
                             fontweight='bold', ha='center',
                             bbox=dict(facecolor='black', alpha=0.9, pad=0.5))
         ax.set_title(title)
