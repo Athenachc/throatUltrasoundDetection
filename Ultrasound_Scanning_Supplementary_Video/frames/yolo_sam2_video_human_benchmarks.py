@@ -31,139 +31,197 @@ yolo_models_list = [
 video_folder = "/home/athena/Ultrasound_videos/Ultrasound_Scanning_Supplementary_Video/frames/all_online_human_videos/"
 gt_folder = "/home/athena/Ultrasound_videos/Ultrasound_Scanning_Supplementary_Video/frames/online_human_selected_GT_label/SegmentationClass/" 
 
+# Fixed Colors for Anatomical Consistency (RGBA)
+COLOR_MAP = {
+    "TC": [0, 1, 0, 0.5],    # Green
+    "CC": [1, 0, 0, 0.5],    # Red
+    "T":  [0, 0, 1, 0.5]     # Blue (for T-rings)
+}
+
 # --- HELPER FUNCTIONS ---
+def calculate_iou(boxA, boxB):
+    xA = max(boxA[0], boxB[0]); yA = max(boxA[1], boxB[1])
+    xB = min(boxA[2], boxB[2]); yB = min(boxA[3], boxB[3])
+    interArea = max(0, xB - xA + 1) * max(0, yB - yA + 1)
+    boxAArea = (boxA[2] - boxA[0] + 1) * (boxA[3] - boxA[1] + 1)
+    boxBArea = (boxB[2] - boxB[0] + 1) * (boxB[3] - boxB[1] + 1)
+    return interArea / float(boxAArea + boxBArea - interArea)
 
-def print_progress(current, total, video_name):
-    percent = (current / total) * 100
-    msg = f"\r    >>> [{video_name}] Frame: {current}/{total} ({percent:.1f}%) "
-    sys.stderr.write(msg)
-    sys.stderr.flush()
-
-def save_visual_comparison(frame_rgb, gt_mask, model_masks, video_name, frame_idx):
+def save_visual_comparison(frame_rgb, gt_mask, model_masks_dict, model_labels_dict, video_name, frame_idx):
     full_data_models = ['train9', 'train10', 'train11']
     limited_data_models = ['train3', 'train5', 'train8']
     
-    fig = plt.figure(figsize=(20, 10))
+    fig = plt.figure(figsize=(22, 10))
     gs = fig.add_gridspec(2, 5)
 
-    # Row 1: Original, GT, and Full Train Models
-    ax_orig = fig.add_subplot(gs[0, 0]); ax_orig.imshow(frame_rgb); ax_orig.set_title(f"Original\n({video_name} @ {frame_idx})"); ax_orig.axis('off')
-    ax_gt = fig.add_subplot(gs[0, 1]); ax_gt.imshow(gt_mask, cmap='gray'); ax_gt.set_title("Ground Truth"); ax_gt.axis('off')
+    # 1. Original
+    ax_orig = fig.add_subplot(gs[0, 0])
+    ax_orig.imshow(frame_rgb)
+    ax_orig.set_title(f"Original\n({video_name} @ {frame_idx})")
+    ax_orig.axis('off')
+
+    # 2. Ground Truth (B&W + Cyan Labels)
+    ax_gt = fig.add_subplot(gs[0, 1])
+    bw_gt = np.zeros((*gt_mask.shape, 3), dtype=np.uint8)
+    bw_gt[gt_mask > 0] = [255, 255, 255] 
+    ax_gt.imshow(bw_gt)
+    
+    num_labels, labels_im, stats, centroids = cv2.connectedComponentsWithStats(gt_mask)
+    if num_labels > 1:
+        valid_centroids = centroids[1:]
+        sorted_indices = np.argsort(valid_centroids[:, 0])
+        t_count = 1
+        for i, idx in enumerate(sorted_indices):
+            cx, cy = int(valid_centroids[idx][0]), int(valid_centroids[idx][1])
+            gt_lbl = "TC" if i == 0 else ("CC" if i == 1 else f"T{t_count}")
+            if i > 1: t_count += 1
+            ax_gt.text(cx, cy + 35, gt_lbl, color='cyan', fontsize=10, fontweight='bold', 
+                       ha='center', bbox=dict(facecolor='black', alpha=0.8, pad=1))
+    ax_gt.set_title("Ground Truth (B&W)")
+    ax_gt.axis('off')
+
+    # 3. Model Panels (Colored + Labeled)
+    def plot_with_labels(ax, m_id, title):
+        ax.imshow(frame_rgb)
+        if m_id in model_masks_dict and model_masks_dict[m_id] is not None:
+            mask_overlay = model_masks_dict[m_id]
+            if mask_overlay.shape[-1] == 4:
+                ax.imshow(mask_overlay)
+            
+            if m_id in model_labels_dict:
+                for label, coords in model_labels_dict[m_id]:
+                    ax.text(coords[0], coords[1] + 35, label, color='white', fontsize=11, 
+                            fontweight='bold', ha='center',
+                            bbox=dict(facecolor='black', alpha=0.9, pad=0.5))
+        ax.set_title(title)
+        ax.axis('off')
 
     for i, m_id in enumerate(full_data_models):
-        ax = fig.add_subplot(gs[0, i+2])
-        ax.imshow(frame_rgb, alpha=0.6)
-        if m_id in model_masks: ax.imshow(model_masks[m_id], cmap='jet', alpha=0.4)
-        ax.set_title(f"{m_id} (Full)"); ax.axis('off')
-
-    # Row 2: Limited Data Models
+        plot_with_labels(fig.add_subplot(gs[0, i+2]), m_id, f"{m_id} (Full)")
     for i, m_id in enumerate(limited_data_models):
-        ax = fig.add_subplot(gs[1, i+1])
-        ax.imshow(frame_rgb, alpha=0.6)
-        if m_id in model_masks: ax.imshow(model_masks[m_id], cmap='jet', alpha=0.4)
-        ax.set_title(f"{m_id} (No Online)"); ax.axis('off')
+        plot_with_labels(fig.add_subplot(gs[1, i+1]), m_id, f"{m_id} (Limited)")
 
     plt.tight_layout()
     os.makedirs("validation_visuals", exist_ok=True)
-    save_path = f"validation_visuals/{video_name}_frame_{frame_idx:05d}_comparison.png"
-    plt.savefig(save_path, bbox_inches='tight', dpi=150)
+    plt.savefig(f"validation_visuals/{video_name}_F{frame_idx:05d}.png", bbox_inches='tight', dpi=150)
     plt.close()
 
-def plot_benchmark_results(results_list):
-    df = pd.DataFrame(results_list)
-    if df.empty: return
-    summary = df.groupby('Model').agg({'Mean Dice': 'mean', 'FPS': 'mean', 'Avg Latency (ms)': 'mean'}).reset_index()
-    sns.set_theme(style="whitegrid")
-
-    # Dice Comparison
-    plt.figure(figsize=(10, 6))
-    colors = ["#2ecc71" if m in ['train9', 'train10', 'train11'] else "#e74c3c" for m in summary['Model']]
-    ax = sns.barplot(data=summary, x='Model', y='Mean Dice', palette=colors)
-    plt.title('Mean Dice Score Comparison'); plt.ylim(0, 1.0)
-    plt.savefig("dice_comparison.png", dpi=300, bbox_inches='tight'); plt.close()
-
-    # Efficiency Trade-off
-    plt.figure(figsize=(10, 6))
-    sns.scatterplot(data=summary, x='FPS', y='Mean Dice', hue='Model', s=200)
-    plt.title('Efficiency vs. Accuracy Trade-off')
-    plt.savefig("efficiency_tradeoff.png", dpi=300, bbox_inches='tight'); plt.close()
-
 # --- CORE BENCHMARK ENGINE ---
-
-def run_hybrid_benchmark(loaded_yolos, sam2_predictor, video_path, gt_folder):
+def run_hybrid_benchmark(yolo_paths, sam2_predictor, video_path, gt_folder):
     video_name = os.path.basename(video_path)
     v_base_name = os.path.splitext(video_name)[0]
     cap = cv2.VideoCapture(video_path)
+    width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
     
-    # 1. Identify GT frames using Regex (handles 01, 001, 00001 padding)
     all_gt_paths = glob(os.path.join(gt_folder, f"{v_base_name}_*.png"))
-    target_frames = {}
-    for path in all_gt_paths:
-        match = re.search(r'_(\d+)\.png$', path)
-        if match:
-            target_frames[int(match.group(1))] = path
-
-    stats = {m_id: {"latencies": [], "dice": []} for m_id in loaded_yolos.keys()}
+    target_frames = {int(re.search(r'_(\d+)\.png$', p).group(1)): p for p in all_gt_paths if re.search(r'_(\d+)\.png$', p)}
     
-    # 2. Process only relevant frames
+    # Global stats for this video
+    video_stats = []
+    accumulated_metrics = {os.path.basename(os.path.dirname(os.path.dirname(p))): {"latencies":[], "dice":[], "tp":[]} for p in yolo_paths}
+
     for frame_idx in sorted(target_frames.keys()):
         cap.set(cv2.CAP_PROP_POS_FRAMES, frame_idx)
         ret, frame = cap.read()
-        if not ret: # Try 1-based indexing fallback
-            cap.set(cv2.CAP_PROP_POS_FRAMES, frame_idx - 1)
-            ret, frame = cap.read()
-            if not ret: continue
-        
+        if not ret: continue
         frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-        gt_mask = np.where(cv2.imread(target_frames[frame_idx], 0) > 0, 1, 0).astype(np.uint8)
-        current_masks = {}
+        
+        gt_mask_raw = cv2.imread(target_frames[frame_idx], 0)
+        gt_mask = np.where(gt_mask_raw > 0, 1, 0).astype(np.uint8)
+        coords_gt = cv2.findNonZero(gt_mask_raw)
+        gt_box = None
+        if coords_gt is not None:
+            gx, gy, gw, gh = cv2.boundingRect(coords_gt)
+            gt_box = [gx, gy, gx + gw, gy + gh]
 
-        for m_id, model in loaded_yolos.items():
-            start = time.perf_counter()
-            res = model.predict(frame, conf=0.5, verbose=False)[0]
-            mask = np.zeros(frame.shape[:2], dtype=np.uint8)
-            
-            if len(res.boxes) > 0:
-                sam2_predictor.set_image(frame_rgb)
-                for box in res.boxes.xyxy.cpu().numpy():
-                    m, _, _ = sam2_predictor.predict(box=box, multimask_output=False)
-                    mask = np.maximum(mask, m[0].astype(np.uint8))
-            
-            stats[m_id]["latencies"].append((time.perf_counter() - start) * 1000)
-            stats[m_id]["dice"].append(dc(mask, gt_mask))
-            current_masks[m_id] = mask
+        frame_masks = {}
+        frame_labels = {}
 
-        save_visual_comparison(frame_rgb, gt_mask, current_masks, v_base_name, frame_idx)
-        print(f"    [Processed] {v_base_name} Frame {frame_idx}")
+        # Process each YOLO model sequentially for this frame
+        for yolo_p in yolo_paths:
+            m_id = yolo_p.split('/')[-3]
+            model = YOLO(yolo_p).to("cuda")
+            
+            start_time = time.perf_counter()
+            results = model.predict(frame, conf=0.5, verbose=False)[0]
+            
+            boxes = results.boxes.xyxy.cpu().numpy()
+            class_ids = results.boxes.cls.cpu().numpy().astype(int)
+            
+            vis_mask = np.zeros((*frame.shape[:2], 4))
+            bin_mask = np.zeros(frame.shape[:2], dtype=np.uint8)
+            lbl_coords = []
+            is_tp = 0
+
+            if len(boxes) > 0:
+                tc_indices = [i for i, cid in enumerate(class_ids) if cid in [0, 2]]
+                cart_indices = [i for i, cid in enumerate(class_ids) if cid == 1]
+                
+                tc_side = 'left'
+                if tc_indices:
+                    cx_vals = (boxes[tc_indices, 0] + boxes[tc_indices, 2]) / 2
+                    best_tc_idx = tc_indices[np.argmin(np.minimum(cx_vals, width - cx_vals))]
+                    tc_side = 'left' if cx_vals[np.argmin(np.minimum(cx_vals, width - cx_vals))] < width/2 else 'right'
+                    
+                    # SAM2 for TC
+                    sam2_predictor.set_image(frame_rgb)
+                    m, _, _ = sam2_predictor.predict(box=boxes[best_tc_idx], multimask_output=False)
+                    tc_m = m[0].astype(np.uint8)
+                    bin_mask = np.maximum(bin_mask, tc_m)
+                    vis_mask[tc_m > 0] = COLOR_MAP["TC"]
+                    lbl_coords.append(("TC", (int((boxes[best_tc_idx][0]+boxes[best_tc_idx][2])/2), int(boxes[best_tc_idx][3]))))
+                    
+                    if gt_box and calculate_iou(boxes[best_tc_idx], gt_box) >= 0.5: is_tp = 1
+
+                if cart_indices:
+                    cc_x = (boxes[cart_indices, 0] + boxes[cart_indices, 2]) / 2
+                    s_idx = np.argsort(cc_x)[::-1] if tc_side == 'right' else np.argsort(cc_x)
+                    t_cnt = 1
+                    for i, idx in enumerate(s_idx):
+                        act_idx = cart_indices[idx]
+                        m, _, _ = sam2_predictor.predict(box=boxes[act_idx], multimask_output=False)
+                        inst_m = m[0].astype(np.uint8)
+                        bin_mask = np.maximum(bin_mask, inst_m)
+                        
+                        curr_lbl = "CC" if i == 0 else "T"
+                        vis_mask[inst_m > 0] = COLOR_MAP[curr_lbl]
+                        display_lbl = "CC" if i == 0 else f"T{t_cnt}"
+                        lbl_coords.append((display_lbl, (int((boxes[act_idx][0]+boxes[act_idx][2])/2), int(boxes[act_idx][3]))))
+                        if i > 0: t_cnt += 1
+
+            accumulated_metrics[m_id]["latencies"].append((time.perf_counter() - start_time)*1000)
+            accumulated_metrics[m_id]["dice"].append(dc(bin_mask, gt_mask))
+            accumulated_metrics[m_id]["tp"].append(is_tp)
+            
+            frame_masks[m_id] = vis_mask
+            frame_labels[m_id] = lbl_coords
+            
+            del model
+            torch.cuda.empty_cache()
+
+        print(f"  --> Frame {frame_idx:05d} benchmarked for all models.", end='\r')
+        save_visual_comparison(frame_rgb, gt_mask, frame_masks, frame_labels, v_base_name, frame_idx)
 
     cap.release()
-    return [{
-        "Video": video_name, "Model": m, "Avg Latency (ms)": round(np.mean(d["latencies"]), 2),
-        "FPS": round(1000/np.mean(d["latencies"]), 1), "Mean Dice": round(np.mean(d["dice"]), 4)
-    } for m, d in stats.items() if d["dice"]]
-
-# --- MAIN EXECUTION ---
+    return [{ "Video": video_name, "Model": m, 
+              "FPS": round(1000/np.mean(d["latencies"]), 1) if d["latencies"] else 0,
+              "Mean Dice": round(np.mean(d["dice"]), 4) if d["dice"] else 0,
+              "mAP@50": round(np.mean(d["tp"]), 4) if d["tp"] else 0 
+            } for m, d in accumulated_metrics.items()]
 
 if __name__ == "__main__":
-    print("Loading YOLO models...")
-    loaded_yolos = {path.split('/')[-3]: YOLO(path).to("cuda") for path in yolo_models_list}
-
-    print("Initializing SAM2...")
     GlobalHydra.instance().clear()
     initialize(config_path=".", version_base=None)
     sam2_predictor = SAM2ImagePredictor(build_sam2("sam2.1_hiera_l", "/home/athena/sam2/checkpoints/sam2.1_hiera_large.pt", device="cuda"))
 
     all_results = []
-    video_files = sorted(glob(os.path.join(video_folder, "*.mp4")))
-
-    for video_path in video_files:
-        print(f"\n--- Video: {os.path.basename(video_path)} ---")
+    for vp in sorted(glob(os.path.join(video_folder, "*.mp4"))):
         try:
-            all_results.extend(run_hybrid_benchmark(loaded_yolos, sam2_predictor, video_path, gt_folder))
+            all_results.extend(run_hybrid_benchmark(yolo_models_list, sam2_predictor, vp, gt_folder))
         except Exception as e:
-            print(f"Error: {e}")
+            print(f"\n[ERROR] {vp}: {e}")
 
     if all_results:
-        pd.DataFrame(all_results).to_csv("hybrid_benchmark_results.csv", index=False)
-        plot_benchmark_results(all_results)
-        print("\nSuccess. Check 'hybrid_benchmark_results.csv' and 'validation_visuals/'.")
+        df = pd.DataFrame(all_results)
+        df.to_csv("hybrid_benchmark_results.csv", index=False)
+        print("\n" + "="*50 + "\nFINAL SUMMARY\n" + str(df.groupby('Model').mean(numeric_only=True)) + "\n" + "="*50)
