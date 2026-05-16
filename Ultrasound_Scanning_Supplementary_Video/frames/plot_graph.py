@@ -2,61 +2,108 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
 
-# Load data
-df = pd.read_csv('/home/athena/Downloads/hybrid_benchmark_results_old.csv')
+# Set formal academic plotting style
+plt.style.use('seaborn-v0_8-whitegrid')
+plt.rcParams.update({
+    'font.size': 11,
+    'axes.labelsize': 12,
+    'axes.titlesize': 13,
+    'xtick.labelsize': 10,
+    'ytick.labelsize': 10,
+    'figure.titlesize': 14
+})
 
-# 1. Define Model Mappings based on Table labeling
-# Architecture: YOLOvXn+SAM2 | Training Dataset: Hybrid or In-house
-model_map = {
-    'train9': 'YOLOv8n+SAM2 (Hybrid)',
-    'train10': 'YOLOv10n+SAM2 (Hybrid)',
-    'train11': 'YOLOv11n+SAM2 (Hybrid)',
-    'train3': 'YOLOv8n+SAM2 (In-house)',
-    'train8': 'YOLOv10n+SAM2 (In-house)',
-    'train5': 'YOLOv11n+SAM2 (In-house)'
+# ==========================================
+# 1. READ AND PREPROCESS DATA FROM CSVS
+# ==========================================
+# Update this path if hybrid_benchmark_results_old.csv is in a different folder
+path_unet_summary = '/home/athena/Downloads/comparison/video_summary.csv'
+path_sam_summary = '/home/athena/Downloads/comparison/hybrid_benchmark_results_old.csv'
+
+# Load both datasets
+df_unet = pd.read_csv(path_unet_summary)
+df_sam = pd.read_csv(path_sam_summary)
+
+# Define environments based on your file naming convention
+df_unet['Environment'] = df_unet['Video'].apply(lambda x: 'Generalization' if 'video' in x else 'Controlled')
+df_sam['Environment'] = df_sam['Video'].apply(lambda x: 'Generalization' if 'video' in x else 'Controlled')
+
+# Map the 3 methodologies from the U-Net summary file
+unet_map = {
+    'plain_unet': 'Plain U-Net (In-house)',
+    'train3': 'YOLOv8n+U-Net (In-house)',
+    'train9': 'YOLOv8n+U-Net (Hybrid)'
 }
-df['Model_Name'] = df['Model'].map(model_map)
+df_unet_filtered = df_unet[df_unet['Model'].isin(unet_map.keys())].copy()
+df_unet_filtered['Methodology'] = df_unet_filtered['Model'].map(unet_map)
 
-# Defining Training Dataset names to match Table columns exactly
-df['Training Dataset'] = df['Model_Name'].apply(lambda x: 'Hybrid' if 'Hybrid' in x else 'In-house')
+# Map the SAM2 methodology from the old benchmark file (where train9 = SAM2)
+df_sam_filtered = df_sam[df_sam['Model'] == 'train9'].copy()
+df_sam_filtered['Methodology'] = 'YOLOv8n+SAM2 (Hybrid)'
 
-# Extracting Architecture name (e.g., YOLOv8n+SAM2) for the X-axis
-df['Architecture'] = df['Model_Name'].apply(lambda x: x.split(' ')[0])
+# Combine the dataframes together for plotting
+cols_to_keep = ['Video', 'Methodology', 'Environment', 'FPS', 'Mean Dice']
+df_combined = pd.concat([df_unet_filtered[cols_to_keep], df_sam_filtered[cols_to_keep]], ignore_index=True)
 
-# 2. Categorize Videos (Controlled vs Generalization)
-df['Environment'] = df['Video'].apply(lambda x: 'Generalization' if 'video' in x else 'Controlled')
+# Calculate the averages across ALL videos per Model and Environment
+grouped_df = df_combined.groupby(['Methodology', 'Environment'])[['Mean Dice', 'FPS']].mean().reset_index()
 
-sns.set_style("whitegrid")
+# ==========================================
+# GRAPH 1: GENERALIZATION GAP (BAR CHART)
+# ==========================================
+plt.figure(figsize=(9, 5.5))
 
-# --- Plot 1: Generalization Gap Bar Chart ---
-plt.figure(figsize=(10, 6))
-sns.barplot(data=df, x='Architecture', y='Mean Dice', hue='Training Dataset', palette='muted', errorbar=None)
-plt.title('Performance Robustness: Hybrid vs. In-house Training', fontsize=14, pad=15)
-plt.ylabel('Mean Dice Score', fontsize=12)
-plt.xlabel('Architecture (Detection + Segmentation)', fontsize=12)
-plt.ylim(0, 1.0)
-plt.legend(title='Training Dataset', loc='upper right')
-plt.savefig('generalization_gap_v2.png', dpi=300, bbox_inches='tight')
+sns.barplot(
+    data=grouped_df, 
+    x='Methodology', 
+    y='Mean Dice', 
+    hue='Environment', 
+    palette=['#4C72B0', '#C44E52'], # Academic blue and muted red
+    edgecolor='black',
+    linewidth=1
+)
 
-# --- Plot 2: Speed vs. Accuracy Trade-off ---
-plt.figure(figsize=(10, 6))
-# Using Controlled data for fair speed comparison (avoids nominal FPS spikes)
-ctrl_df = df[df['Environment'] == 'Controlled']
-sns.scatterplot(data=ctrl_df, x='FPS', y='Mean Dice', hue='Training Dataset', style='Architecture', s=200, palette='viridis')
-plt.title('Speed-Accuracy Pareto Front (Controlled Env)', fontsize=14)
-plt.xlabel('Inference Speed (FPS)', fontsize=12)
-plt.ylabel('Mean Dice Score', fontsize=12)
-plt.grid(True, linestyle='--', alpha=0.6)
-plt.legend(bbox_to_anchor=(1.05, 1), loc='upper left')
-plt.savefig('speed_accuracy_tradeoff_v2.png', dpi=300, bbox_inches='tight')
-
-# --- Plot 3: Stability Boxplot ---
-plt.figure(figsize=(10, 6))
-sns.boxplot(data=df, x='Architecture', y='Mean Dice', hue='Training Dataset', palette='Set2')
-plt.title('Inference Stability Across All Video Sequences', fontsize=14)
-plt.ylabel('Mean Dice Score', fontsize=12)
-plt.xlabel('Architecture')
+plt.title('Anatomical Generalization Gap Across Diverse Video Domains', pad=15, fontweight='bold')
+plt.ylabel('Mean Dice Similarity Coefficient (DSC)')
+plt.xlabel('Evaluated Segmentation Architectures')
+plt.ylim(0, 1.05)
+plt.xticks(rotation=15)
+plt.legend(title='Testing Domain', loc='upper right')
 plt.tight_layout()
-plt.savefig('performance_stability_v2.png', dpi=300)
 
-print("Graphs generated successfully: generalization_gap.png, speed_accuracy_tradeoff.png, performance_stability.png")
+plt.savefig('generalization_gap_analysis.png', dpi=300)
+plt.close()
+
+# ==========================================
+# GRAPH 2: SPEED VS ACCURACY PARETO (SCATTER)
+# ==========================================
+plt.figure(figsize=(9, 5.5))
+
+# Plot the scatter using the aggregated data across all videos
+sns.scatterplot(
+    data=grouped_df,
+    x='FPS',
+    y='Mean Dice',
+    hue='Methodology',
+    style='Environment',
+    s=250, # Marker size
+    palette=['#4C72B0', '#DD8452', '#2E8B57', '#9370DB'], # Distinct colors
+    edgecolor='black',
+    linewidth=1.2
+)
+
+plt.title('Speed-Accuracy Trade-off (Averaged Across All Videos)', pad=15, fontweight='bold')
+plt.xlabel('Average Inference Speed (FPS)')
+plt.ylabel('Average Mean Dice Score')
+plt.ylim(-0.05, 1.05)
+plt.xlim(0, max(grouped_df['FPS']) + 2) # Dynamically pad the x-axis
+plt.grid(True, linestyle="--", alpha=0.5)
+
+# Place legend outside to avoid blocking data points
+plt.legend(title='Methodology & Domain', bbox_to_anchor=(1.02, 1), loc='upper left')
+plt.tight_layout()
+
+plt.savefig('speed_accuracy_tradeoff.png', dpi=300)
+plt.close()
+
+print("Publication-ready figures generated directly from CSVs: 'generalization_gap_analysis.png' and 'speed_accuracy_tradeoff.png'")
