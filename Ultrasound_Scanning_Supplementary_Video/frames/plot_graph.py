@@ -50,33 +50,8 @@ grouped_df = df_combined.groupby(['Architecture', 'Environment'])[['Mean Dice', 
 
 
 # ==========================================
-# GRAPH 1: LATENCY GAP ANALYSIS (BAR CHART)
-# ==========================================
-# # (Kept commented out for your future use)
-# plt.figure(figsize=(9, 5.5))
-# sns.barplot(
-#     data=grouped_df, 
-#     x='Architecture', 
-#     y='Avg Latency (ms)', 
-#     hue='Environment', 
-#     palette=['#4C72B0', '#C44E52'], 
-#     edgecolor='black',
-#     linewidth=1
-# )
-# plt.title('Average Inference Latency Across Diverse Video Domains', pad=15, fontweight='bold')
-# plt.ylabel('Average Inference Latency (ms)')
-# plt.xlabel('Evaluated Segmentation Architectures')
-# plt.xticks(rotation=15)
-# plt.legend(title='Testing Domain', loc='upper left')
-# plt.tight_layout()
-# plt.savefig('latency_comparison_bar.png', dpi=300)
-# plt.close()
-
-
-# ==========================================
 # GRAPH 2: LATENCY VS ACCURACY PARETO (SCATTER)
 # ==========================================
-# Compact 5.0-inch height layout to make the final figure shorter
 plt.figure(figsize=(10, 5.0))
 
 # Enhanced background shading (alpha=0.15) for high-efficiency zone visibility
@@ -115,7 +90,6 @@ handles, labels = ax.get_legend_handles_labels()
 try:
     env_index = labels.index('Environment')
 except ValueError:
-    # Safe fallback if string matching encounters structural variances
     env_index = len(labels) // 2 
 
 # Clean slicing based on the dynamic position of Environment
@@ -125,13 +99,17 @@ architecture_labels = labels[:env_index]
 environment_handles = handles[env_index:]
 environment_labels = labels[env_index:]
 
+# Create a concrete patch matching the axvspan to represent the shaded zone
+zone_handle = mpatches.Patch(color='gray', alpha=0.15, edgecolor='none')
+zone_label = "High-Efficiency Zone (< 160 ms)"
+
 # Create a blank structural patch proxy to act as a clean spacer line
 blank_handle = mpatches.Rectangle((0, 0), 1, 1, fill=False, edgecolor='none', visible=False)
 blank_label = ""
 
-# Reassemble components with the spacer dividing them right on top of Environment
-new_handles = architecture_handles + [blank_handle] + environment_handles
-new_labels = architecture_labels + [blank_label] + environment_labels
+# Reassemble components: Models -> Spacer -> Environments -> Zone Handle (at the absolute bottom)
+new_handles = architecture_handles + [blank_handle] + environment_handles + [zone_handle]
+new_labels = architecture_labels + [blank_label] + environment_labels + [zone_label]
 
 # Render legend outside the plot frame
 plt.legend(
@@ -148,4 +126,4 @@ plt.tight_layout()
 plt.savefig('latency_vs_accuracy_scatter.png', dpi=300)
 plt.close()
 
-print("Publication-ready compact scatter plot successfully compiled and saved: 'latency_vs_accuracy_scatter.png'")
+print("Publication-ready compact scatter plot with shaded zone item fixed to the bottom of the legend.")
