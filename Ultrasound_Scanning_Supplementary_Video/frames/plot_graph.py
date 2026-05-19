@@ -7,12 +7,12 @@ import matplotlib.lines as mlines
 # Set formal academic plotting style
 plt.style.use('seaborn-v0_8-whitegrid')
 plt.rcParams.update({
-    'font.size': 11,
-    'axes.labelsize': 12,
-    'axes.titlesize': 13,
-    'xtick.labelsize': 10,
-    'ytick.labelsize': 10,
-    'figure.titlesize': 14
+    'font.size': 14,
+    'axes.labelsize': 14,
+    'axes.titlesize': 14,
+    'xtick.labelsize': 14,
+    'ytick.labelsize': 14,
+    'figure.titlesize': 8
 })
 
 # ==========================================
@@ -162,7 +162,7 @@ for model in sam2_models:
     ax1.plot(data['Jitter_Pos'], data['Mean Dice'], label=model, linewidth=1.0, color=model_color_dict[model],
              marker=sam2_marker_dict[model], markersize=7, markeredgecolor='black', markeredgewidth=0.5, alpha=0.9)
 add_domain_divider(1.0)
-plt.title('Video-by-Video Evaluation: Mean Dice Comparison (All YOLO+SAM2 Variants)', pad=12, fontweight='bold')
+plt.title('Mean Dice Comparison of the YOLO+SAM2 Architecture under Hybrid and In-House Training Configurations', pad=12, fontweight='bold')
 plt.xlabel('Dataset Identification Sequence', labelpad=10)
 plt.ylabel('Mean Dice Coefficient')
 plt.xticks(range(len(video_axis_order)), video_axis_order, rotation=30, ha='right')
@@ -180,7 +180,7 @@ for model in framework_comparison_models:
     ax2.plot(data['Jitter_Pos'], data['Mean Dice'], label=model, linewidth=1.0, color=model_color_dict[model],
              marker=framework_marker_dict[model], markersize=7, markeredgecolor='black', markeredgewidth=0.5, alpha=0.9)
 add_domain_divider(1.0)
-plt.title('Video-by-Video Evaluation: Mean Dice Comparison (SAM2 vs. U-Net Frameworks)', pad=12, fontweight='bold')
+plt.title('Mean Dice Comparison of the Proposed YOLOv8n+SAM2 Architecture with YOLOv8n+U-Net and Traditional U-Net Baselines', pad=12, fontweight='bold')
 plt.xlabel('Dataset Identification Sequence', labelpad=10)
 plt.ylabel('Mean Dice Coefficient')
 plt.xticks(range(len(video_axis_order)), video_axis_order, rotation=30, ha='right')
@@ -232,11 +232,11 @@ leg_elements_3.append(mlines.Line2D([], [], color='none', marker='o', markerface
 # leg_elements_3.append(zone_patch)
 
 plt.legend(handles=leg_elements_3, bbox_to_anchor=(1.02, 1), loc='upper left', frameon=True)
-plt.title('Latency vs. Accuracy Matrix: YOLO+SAM2 Optimization Space', pad=12, fontweight='bold')
+plt.title('Latency against Accuracy Matrix of the YOLO + SAM2 Architecture under Hybrid and In-House Training Configurations', pad=12, fontweight='bold')
 plt.xlabel('Average Inference Latency (ms)')
 plt.ylabel('Mean Dice Score')
 plt.ylim(-0.05, 1.0)
-plt.xlim(0, grouped_sam2['Avg Latency (ms)'].max() + 50)
+plt.xlim(-5, grouped_sam2['Avg Latency (ms)'].max() + 50)
 plt.grid(True, linestyle="--", alpha=0.4)
 plt.tight_layout()
 plt.savefig('scatter_tradeoff_sam2_variants.png', dpi=300)
@@ -271,7 +271,7 @@ leg_elements_4.append(mlines.Line2D([], [], color='none', marker='o', markerface
 # leg_elements_4.append(zone_patch)
 
 plt.legend(handles=leg_elements_4, bbox_to_anchor=(1.02, 1), loc='upper left', frameon=True)
-plt.title('Latency vs. Accuracy Matrix: SAM2 vs. U-Net Pipeline Comparison', pad=12, fontweight='bold')
+plt.title('Latency against Accuracy Analysis Comparing the Proposed YOLOv8n + SAM2 Architecture with YOLOv8n + U-Net and Traditional U-Net Baselines', pad=12, fontweight='bold')
 plt.xlabel('Average Inference Latency (ms)')
 plt.ylabel('Mean Dice Score')
 plt.ylim(-0.05, 0.9)
