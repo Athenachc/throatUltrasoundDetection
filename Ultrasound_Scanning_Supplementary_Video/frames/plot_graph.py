@@ -103,13 +103,16 @@ environment_labels = labels[env_index:]
 zone_handle = mpatches.Patch(color='gray', alpha=0.15, edgecolor='none')
 zone_label = "High-Efficiency Zone (< 160 ms)"
 
-# Create a blank structural patch proxy to act as a clean spacer line
-blank_handle = mpatches.Rectangle((0, 0), 1, 1, fill=False, edgecolor='none', visible=False)
-blank_label = ""
+# Create blank structural patch proxies to act as clean spacer lines
+blank_handle_1 = mpatches.Rectangle((0, 0), 1, 1, fill=False, edgecolor='none', visible=False)
+blank_label_1 = ""
 
-# Reassemble components: Models -> Spacer -> Environments -> Zone Handle (at the absolute bottom)
-new_handles = architecture_handles + [blank_handle] + environment_handles + [zone_handle]
-new_labels = architecture_labels + [blank_label] + environment_labels + [zone_label]
+blank_handle_2 = mpatches.Rectangle((0, 0), 1, 1, fill=False, edgecolor='none', visible=False)
+blank_label_2 = ""
+
+# Reassemble components: Models -> Spacer 1 -> Environments -> Spacer 2 -> Zone Handle (at the absolute bottom)
+new_handles = architecture_handles + [blank_handle_1] + environment_handles + [blank_handle_2, zone_handle]
+new_labels = architecture_labels + [blank_label_1] + environment_labels + [blank_label_2, zone_label]
 
 # Render legend outside the plot frame
 plt.legend(
@@ -126,4 +129,4 @@ plt.tight_layout()
 plt.savefig('latency_vs_accuracy_scatter.png', dpi=300)
 plt.close()
 
-print("Publication-ready compact scatter plot with shaded zone item fixed to the bottom of the legend.")
+print("Scatter plot generated successfully with dual-spaced formatting inside the legend.")
