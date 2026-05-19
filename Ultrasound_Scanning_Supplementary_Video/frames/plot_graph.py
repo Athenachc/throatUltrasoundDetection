@@ -18,6 +18,7 @@ plt.rcParams.update({
 # ==========================================
 # 1. READ AND PREPROCESS DATA FROM CSVS
 # ==========================================
+# Updated to relative file paths for workspace compatibility
 path_unet_summary = '/home/athena/Downloads/comparison/video_summary.csv'
 path_sam_summary = '/home/athena/Downloads/comparison/hybrid_benchmark_results_old.csv'
 
@@ -72,7 +73,7 @@ for idx, vid in enumerate(generalization_vids):
 df_combined['Video_Renamed'] = df_combined['Video'].map(video_rename_dict)
 
 # Explicit layout tracking order along x-axis
-video_axis_order = [f"In-house Video {i}" for i in range(1, 8)] + [f"Web-sourced Video {i}" for i in range(1, 7)]
+video_axis_order = [f"In-house Video {i}" for i in range(1, len(controlled_vids) + 1)] + [f"Web-sourced Video {i}" for i in range(1, len(generalization_vids) + 1)]
 df_combined['Video_Renamed'] = pd.Categorical(df_combined['Video_Renamed'], categories=video_axis_order, ordered=True)
 
 # Map categories to positions to allow clean micro-jitter rendering
@@ -132,9 +133,10 @@ framework_marker_dict = {
 }
 
 def add_domain_divider(max_y):
-    plt.axvline(x=6.5, color='crimson', linestyle='--', linewidth=1.2, alpha=0.7)
-    plt.text(6.3, max_y * 0.94, 'Controlled Domain', color='crimson', ha='right', fontsize=10, fontweight='bold')
-    plt.text(6.7, max_y * 0.94, 'Generalization Domain', color='crimson', ha='left', fontsize=10, fontweight='bold')
+    mid = len(controlled_vids) - 0.5
+    plt.axvline(x=mid, color='crimson', linestyle='--', linewidth=1.2, alpha=0.7)
+    plt.text(mid - 0.2, max_y * 0.94, 'Controlled Domain', color='crimson', ha='right', fontsize=10, fontweight='bold')
+    plt.text(mid + 0.2, max_y * 0.94, 'Generalization Domain', color='crimson', ha='left', fontsize=10, fontweight='bold')
 
 def standardize_legend(ax, marker_size=7, line_width=1.0):
     """Enforces absolute fairness and item equality inside the legend box across backend variations."""
@@ -154,99 +156,57 @@ def standardize_legend(ax, marker_size=7, line_width=1.0):
 # PART A: MEAN DICE LINE GRAPHS
 # ==============================================================================
 # Graph 1: Mean Dice - All YOLO+SAM2 Models
-fig, ax = plt.subplots(figsize=(13, 6.0))
+fig, ax1 = plt.subplots(figsize=(13, 6.0))
 for model in sam2_models:
     data = df_sam2_only[df_sam2_only['Architecture'] == model].sort_values('Video_Pos')
-    ax.plot(data['Jitter_Pos'], data['Mean Dice'], label=model, linewidth=1.0, color=model_color_dict[model],
-            marker=sam2_marker_dict[model], markersize=7, markeredgecolor='black', markeredgewidth=0.5, alpha=0.9)
+    ax1.plot(data['Jitter_Pos'], data['Mean Dice'], label=model, linewidth=1.0, color=model_color_dict[model],
+             marker=sam2_marker_dict[model], markersize=7, markeredgecolor='black', markeredgewidth=0.5, alpha=0.9)
 add_domain_divider(1.0)
 plt.title('Video-by-Video Evaluation: Mean Dice Comparison (All YOLO+SAM2 Variants)', pad=12, fontweight='bold')
 plt.xlabel('Dataset Identification Sequence', labelpad=10)
 plt.ylabel('Mean Dice Coefficient')
 plt.xticks(range(len(video_axis_order)), video_axis_order, rotation=30, ha='right')
-plt.ylim(-0.05, 1.05)
-ax.legend(bbox_to_anchor=(1.02, 1), loc='upper left', frameon=True)
-standardize_legend(ax)
+plt.ylim(-0.05, 1.0)
+ax1.legend(bbox_to_anchor=(1.02, 1), loc='upper left', frameon=True)
+standardize_legend(ax1)
 plt.tight_layout()
 plt.savefig('dice_line_sam2_variants.png', dpi=300)
 plt.close()
 
 # Graph 2: Mean Dice - Framework Comparison (4 Models)
-fig, ax = plt.subplots(figsize=(13, 6.0))
+fig, ax2 = plt.subplots(figsize=(13, 6.0))
 for model in framework_comparison_models:
     data = df_framework_only[df_framework_only['Architecture'] == model].sort_values('Video_Pos')
-    ax.plot(data['Jitter_Pos'], data['Mean Dice'], label=model, linewidth=1.0, color=model_color_dict[model],
-            marker=framework_marker_dict[model], markersize=7, markeredgecolor='black', markeredgewidth=0.5, alpha=0.9)
+    ax2.plot(data['Jitter_Pos'], data['Mean Dice'], label=model, linewidth=1.0, color=model_color_dict[model],
+             marker=framework_marker_dict[model], markersize=7, markeredgecolor='black', markeredgewidth=0.5, alpha=0.9)
 add_domain_divider(1.0)
 plt.title('Video-by-Video Evaluation: Mean Dice Comparison (SAM2 vs. U-Net Frameworks)', pad=12, fontweight='bold')
 plt.xlabel('Dataset Identification Sequence', labelpad=10)
 plt.ylabel('Mean Dice Coefficient')
 plt.xticks(range(len(video_axis_order)), video_axis_order, rotation=30, ha='right')
-plt.ylim(-0.05, 1.05)
-ax.legend(bbox_to_anchor=(1.02, 1), loc='upper left', frameon=True)
-standardize_legend(ax)
+plt.ylim(-0.05, 1.0)
+ax2.legend(bbox_to_anchor=(1.02, 1), loc='upper left', frameon=True)
+standardize_legend(ax2)
 plt.tight_layout()
 plt.savefig('dice_line_framework_comparison.png', dpi=300)
 plt.close()
 
 
 # ==============================================================================
-# PART B: INFERENCE FPS LINE GRAPHS
-# ==============================================================================
-max_fps_val = df_combined['FPS'].max() + 3
-
-# Graph 3: Inference FPS - All YOLO+SAM2 Models
-fig, ax = plt.subplots(figsize=(13, 6.0))
-for model in sam2_models:
-    data = df_sam2_only[df_sam2_only['Architecture'] == model].sort_values('Video_Pos')
-    ax.plot(data['Jitter_Pos'], data['FPS'], label=model, linewidth=1.0, color=model_color_dict[model],
-            marker=sam2_marker_dict[model], markersize=7, markeredgecolor='black', markeredgewidth=0.5, alpha=0.9)
-add_domain_divider(max_fps_val)
-plt.title('Video-by-Video Evaluation: Inference Throughput (All YOLO+SAM2 Variants)', pad=12, fontweight='bold')
-plt.xlabel('Dataset Identification Sequence', labelpad=10)
-plt.ylabel('Frames Per Second (FPS)')
-plt.xticks(range(len(video_axis_order)), video_axis_order, rotation=30, ha='right')
-plt.ylim(-1, max_fps_val)
-ax.legend(bbox_to_anchor=(1.02, 1), loc='upper left', frameon=True)
-standardize_legend(ax)
-plt.tight_layout()
-plt.savefig('fps_line_sam2_variants.png', dpi=300)
-plt.close()
-
-# Graph 4: Inference FPS - Framework Comparison (4 Models)
-fig, ax = plt.subplots(figsize=(13, 6.0))
-for model in framework_comparison_models:
-    data = df_framework_only[df_framework_only['Architecture'] == model].sort_values('Video_Pos')
-    ax.plot(data['Jitter_Pos'], data['FPS'], label=model, linewidth=1.0, color=model_color_dict[model],
-            marker=framework_marker_dict[model], markersize=7, markeredgecolor='black', markeredgewidth=0.5, alpha=0.9)
-add_domain_divider(max_fps_val)
-plt.title('Video-by-Video Evaluation: Inference Throughput (SAM2 vs. U-Net Frameworks)', pad=12, fontweight='bold')
-plt.xlabel('Dataset Identification Sequence', labelpad=10)
-plt.ylabel('Frames Per Second (FPS)')
-plt.xticks(range(len(video_axis_order)), video_axis_order, rotation=30, ha='right')
-plt.ylim(-1, max_fps_val)
-ax.legend(bbox_to_anchor=(1.02, 1), loc='upper left', frameon=True)
-standardize_legend(ax)
-plt.tight_layout()
-plt.savefig('fps_line_framework_comparison.png', dpi=300)
-plt.close()
-
-
-# ==============================================================================
-# PART C: LATENCY VS ACCURACY SCATTER METRIC PLOTS
+# PART B: LATENCY VS ACCURACY SCATTER METRIC PLOTS
 # ==============================================================================
 grouped_sam2 = df_sam2_only.groupby(['Architecture', 'Environment'], observed=False)[['Mean Dice', 'Avg Latency (ms)']].mean().reset_index()
 grouped_framework = df_framework_only.groupby(['Architecture', 'Environment'], observed=False)[['Mean Dice', 'Avg Latency (ms)']].mean().reset_index()
 
-# Cast offsets to float explicitly to fix the categorical math error
+# Cast offsets to float explicitly to fix categorical mapping math
 grouped_sam2['Jitter_Lat'] = grouped_sam2['Avg Latency (ms)'] + grouped_sam2['Architecture'].map(jitter_map).astype(float) * 10
 grouped_framework['Jitter_Lat'] = grouped_framework['Avg Latency (ms)'] + grouped_framework['Architecture'].map(jitter_map).astype(float) * 10
 
-zone_patch = mpatches.Patch(facecolor='gray', alpha=0.15, edgecolor='none', label='High-Efficiency Zone (< 160 ms)')
+# zone_patch = mpatches.Patch(facecolor='gray', alpha=0.15, edgecolor='none', label='High-Efficiency Zone (< 160 ms)')
 
-# Graph 5: Scatter Matrix - All YOLO+SAM2 Models
-fig, ax5 = plt.subplots(figsize=(11, 5.5))
-ax5.axvspan(-20, 160, color='gray', alpha=0.15, zorder=1)
+# Graph 3: Scatter Matrix - All YOLO+SAM2 Models
+fig, ax3 = plt.subplots(figsize=(11, 5.5))
+# ax3.axvspan(-20, 160, color='gray', alpha=0.15, zorder=1)
 
 # Plot manually to maintain strict color/marker configuration and represent environment cleanly
 for idx, row in grouped_sam2.iterrows():
@@ -255,37 +215,37 @@ for idx, row in grouped_sam2.iterrows():
     if pd.isna(m_arch): continue
     
     if m_env == 'Generalization':
-        ax5.scatter(row['Jitter_Lat'], row['Mean Dice'], color=model_color_dict[m_arch], marker=sam2_marker_dict[m_arch],
+        ax3.scatter(row['Jitter_Lat'], row['Mean Dice'], color=model_color_dict[m_arch], marker=sam2_marker_dict[m_arch],
                     facecolors='none', edgecolors=model_color_dict[m_arch], s=130, linewidths=2.0, zorder=3)
     else:
-        ax5.scatter(row['Jitter_Lat'], row['Mean Dice'], color=model_color_dict[m_arch], marker=sam2_marker_dict[m_arch],
+        ax3.scatter(row['Jitter_Lat'], row['Mean Dice'], color=model_color_dict[m_arch], marker=sam2_marker_dict[m_arch],
                     s=130, edgecolor='black', linewidths=0.6, zorder=3)
 
 # Build unified academic legend card
-leg_elements_5 = []
+leg_elements_3 = []
 for model in sam2_models:
-    leg_elements_5.append(mlines.Line2D([], [], color=model_color_dict[model], marker=sam2_marker_dict[model],
+    leg_elements_3.append(mlines.Line2D([], [], color=model_color_dict[model], marker=sam2_marker_dict[model],
                                         linestyle='None', markersize=8, markeredgecolor='black', markeredgewidth=0.5, label=model))
-leg_elements_5.append(mlines.Line2D([], [], color='none', linestyle='None', label='')) # Blank separation line
-leg_elements_5.append(mlines.Line2D([], [], color='gray', marker='o', linestyle='None', markersize=8, markeredgecolor='black', label='Controlled Domain (Solid)'))
-leg_elements_5.append(mlines.Line2D([], [], color='none', marker='o', markerfacecolor='none', linestyle='None', markersize=8, markeredgecolor='gray', markeredgewidth=1.5, label='Generalization Domain (Hollow)'))
-leg_elements_5.append(zone_patch)
+leg_elements_3.append(mlines.Line2D([], [], color='none', linestyle='None', label='')) # Blank separation line
+leg_elements_3.append(mlines.Line2D([], [], color='gray', marker='o', linestyle='None', markersize=8, markeredgecolor='black', label='Controlled Domain (Solid)'))
+leg_elements_3.append(mlines.Line2D([], [], color='none', marker='o', markerfacecolor='none', linestyle='None', markersize=8, markeredgecolor='gray', markeredgewidth=1.5, label='Generalization Domain (Hollow)'))
+# leg_elements_3.append(zone_patch)
 
-plt.legend(handles=leg_elements_5, bbox_to_anchor=(1.02, 1), loc='upper left', frameon=True)
+plt.legend(handles=leg_elements_3, bbox_to_anchor=(1.02, 1), loc='upper left', frameon=True)
 plt.title('Latency vs. Accuracy Matrix: YOLO+SAM2 Optimization Space', pad=12, fontweight='bold')
 plt.xlabel('Average Inference Latency (ms)')
 plt.ylabel('Mean Dice Score')
-plt.ylim(-0.05, 1.05)
-plt.xlim(-20, grouped_sam2['Avg Latency (ms)'].max() + 50)
+plt.ylim(-0.05, 1.0)
+plt.xlim(0, grouped_sam2['Avg Latency (ms)'].max() + 50)
 plt.grid(True, linestyle="--", alpha=0.4)
 plt.tight_layout()
 plt.savefig('scatter_tradeoff_sam2_variants.png', dpi=300)
 plt.close()
 
 
-# Graph 6: Scatter Matrix - Framework Comparison (4 Models)
-fig, ax6 = plt.subplots(figsize=(11, 5.5))
-ax6.axvspan(-20, 160, color='gray', alpha=0.15, zorder=1)
+# Graph 4: Scatter Matrix - Framework Comparison (4 Models)
+fig, ax4 = plt.subplots(figsize=(11, 5.5))
+# ax4.axvspan(-20, 160, color='gray', alpha=0.15, zorder=1)
 
 # Plot manually to maintain strict color/marker configuration and represent environment cleanly
 for idx, row in grouped_framework.iterrows():
@@ -294,31 +254,31 @@ for idx, row in grouped_framework.iterrows():
     if pd.isna(m_arch): continue
     
     if m_env == 'Generalization':
-        ax6.scatter(row['Jitter_Lat'], row['Mean Dice'], color=model_color_dict[m_arch], marker=framework_marker_dict[m_arch],
+        ax4.scatter(row['Jitter_Lat'], row['Mean Dice'], color=model_color_dict[m_arch], marker=framework_marker_dict[m_arch],
                     facecolors='none', edgecolors=model_color_dict[m_arch], s=130, linewidths=2.0, zorder=3)
     else:
-        ax6.scatter(row['Jitter_Lat'], row['Mean Dice'], color=model_color_dict[m_arch], marker=framework_marker_dict[m_arch],
+        ax4.scatter(row['Jitter_Lat'], row['Mean Dice'], color=model_color_dict[m_arch], marker=framework_marker_dict[m_arch],
                     s=130, edgecolor='black', linewidths=0.6, zorder=3)
 
 # Build unified academic legend card
-leg_elements_6 = []
+leg_elements_4 = []
 for model in framework_comparison_models:
-    leg_elements_6.append(mlines.Line2D([], [], color=model_color_dict[model], marker=framework_marker_dict[model],
+    leg_elements_4.append(mlines.Line2D([], [], color=model_color_dict[model], marker=framework_marker_dict[model],
                                         linestyle='None', markersize=8, markeredgecolor='black', markeredgewidth=0.5, label=model))
-leg_elements_6.append(mlines.Line2D([], [], color='none', linestyle='None', label='')) # Blank separation line
-leg_elements_6.append(mlines.Line2D([], [], color='gray', marker='o', linestyle='None', markersize=8, markeredgecolor='black', label='Controlled Domain (Solid)'))
-leg_elements_6.append(mlines.Line2D([], [], color='none', marker='o', markerfacecolor='none', linestyle='None', markersize=8, markeredgecolor='gray', markeredgewidth=1.5, label='Generalization Domain (Hollow)'))
-leg_elements_6.append(zone_patch)
+leg_elements_4.append(mlines.Line2D([], [], color='none', linestyle='None', label='')) # Blank separation line
+leg_elements_4.append(mlines.Line2D([], [], color='gray', marker='o', linestyle='None', markersize=8, markeredgecolor='black', label='Controlled Domain (Solid)'))
+leg_elements_4.append(mlines.Line2D([], [], color='none', marker='o', markerfacecolor='none', linestyle='None', markersize=8, markeredgecolor='gray', markeredgewidth=1.5, label='Generalization Domain (Hollow)'))
+# leg_elements_4.append(zone_patch)
 
-plt.legend(handles=leg_elements_6, bbox_to_anchor=(1.02, 1), loc='upper left', frameon=True)
+plt.legend(handles=leg_elements_4, bbox_to_anchor=(1.02, 1), loc='upper left', frameon=True)
 plt.title('Latency vs. Accuracy Matrix: SAM2 vs. U-Net Pipeline Comparison', pad=12, fontweight='bold')
 plt.xlabel('Average Inference Latency (ms)')
 plt.ylabel('Mean Dice Score')
-plt.ylim(-0.05, 1.05)
-plt.xlim(-20, grouped_framework['Avg Latency (ms)'].max() + 50)
+plt.ylim(-0.05, 0.9)
+plt.xlim(0, grouped_framework['Avg Latency (ms)'].max() + 50)
 plt.grid(True, linestyle="--", alpha=0.4)
 plt.tight_layout()
 plt.savefig('scatter_tradeoff_framework_comparison.png', dpi=300)
 plt.close()
 
-print("Structural adjustment complete. 6 completely balanced and legible graphs generated successfully.")
+print("Structural adjustment complete. 4 highly balanced and legible graphs generated successfully.")
