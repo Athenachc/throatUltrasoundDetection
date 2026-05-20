@@ -7,12 +7,12 @@ import matplotlib.lines as mlines
 # Set formal academic plotting style
 plt.style.use('seaborn-v0_8-whitegrid')
 plt.rcParams.update({
-    'font.size': 14,
-    'axes.labelsize': 14,
-    'axes.titlesize': 14,
-    'xtick.labelsize': 14,
-    'ytick.labelsize': 14,
-    'figure.titlesize': 8
+    'font.size': 11,
+    'axes.labelsize': 16,
+    'axes.titlesize': 16,
+    'xtick.labelsize': 16,
+    'ytick.labelsize': 16,
+    'figure.titlesize': 10
 })
 
 # ==========================================
@@ -135,8 +135,8 @@ framework_marker_dict = {
 def add_domain_divider(max_y):
     mid = len(controlled_vids) - 0.5
     plt.axvline(x=mid, color='crimson', linestyle='--', linewidth=1.2, alpha=0.7)
-    plt.text(mid - 0.2, max_y * 0.94, 'Controlled Domain', color='crimson', ha='right', fontsize=10, fontweight='bold')
-    plt.text(mid + 0.2, max_y * 0.94, 'Generalization Domain', color='crimson', ha='left', fontsize=10, fontweight='bold')
+    plt.text(mid - 0.2, max_y * 0.9, 'Controlled Domain', color='crimson', ha='right', fontsize=16, fontweight='bold')
+    plt.text(mid + 0.2, max_y * 0.9, 'Generalization Domain', color='crimson', ha='left', fontsize=16, fontweight='bold')
 
 def standardize_legend(ax, marker_size=7, line_width=1.0):
     """Enforces absolute fairness and item equality inside the legend box across backend variations."""
@@ -162,7 +162,10 @@ for model in sam2_models:
     ax1.plot(data['Jitter_Pos'], data['Mean Dice'], label=model, linewidth=1.0, color=model_color_dict[model],
              marker=sam2_marker_dict[model], markersize=7, markeredgecolor='black', markeredgewidth=0.5, alpha=0.9)
 add_domain_divider(1.0)
-plt.title('Mean Dice Comparison of the YOLO+SAM2 Architecture under Hybrid and In-House Training Configurations', pad=12, fontweight='bold')
+
+# Multi-line title adjustment
+plt.title('Mean Dice Comparison of the YOLO+SAM2 Architecture\nunder Hybrid and In-House Training Configurations', pad=12, fontweight='bold')
+
 plt.xlabel('Dataset Identification Sequence', labelpad=10)
 plt.ylabel('Mean Dice Coefficient')
 plt.xticks(range(len(video_axis_order)), video_axis_order, rotation=30, ha='right')
@@ -180,7 +183,10 @@ for model in framework_comparison_models:
     ax2.plot(data['Jitter_Pos'], data['Mean Dice'], label=model, linewidth=1.0, color=model_color_dict[model],
              marker=framework_marker_dict[model], markersize=7, markeredgecolor='black', markeredgewidth=0.5, alpha=0.9)
 add_domain_divider(1.0)
-plt.title('Mean Dice Comparison of the Proposed YOLOv8n+SAM2 Architecture with YOLOv8n+U-Net and Traditional U-Net Baselines', pad=12, fontweight='bold')
+
+# Multi-line title adjustment
+plt.title('Mean Dice Comparison of the Proposed YOLOv8n+SAM2 Architecture\nwith YOLOv8n+U-Net and Traditional U-Net Baselines', pad=12, fontweight='bold')
+
 plt.xlabel('Dataset Identification Sequence', labelpad=10)
 plt.ylabel('Mean Dice Coefficient')
 plt.xticks(range(len(video_axis_order)), video_axis_order, rotation=30, ha='right')
@@ -202,11 +208,8 @@ grouped_framework = df_framework_only.groupby(['Architecture', 'Environment'], o
 grouped_sam2['Jitter_Lat'] = grouped_sam2['Avg Latency (ms)'] + grouped_sam2['Architecture'].map(jitter_map).astype(float) * 10
 grouped_framework['Jitter_Lat'] = grouped_framework['Avg Latency (ms)'] + grouped_framework['Architecture'].map(jitter_map).astype(float) * 10
 
-# zone_patch = mpatches.Patch(facecolor='gray', alpha=0.15, edgecolor='none', label='High-Efficiency Zone (< 160 ms)')
-
 # Graph 3: Scatter Matrix - All YOLO+SAM2 Models
 fig, ax3 = plt.subplots(figsize=(11, 5.5))
-# ax3.axvspan(-20, 160, color='gray', alpha=0.15, zorder=1)
 
 # Plot manually to maintain strict color/marker configuration and represent environment cleanly
 for idx, row in grouped_sam2.iterrows():
@@ -229,10 +232,12 @@ for model in sam2_models:
 leg_elements_3.append(mlines.Line2D([], [], color='none', linestyle='None', label='')) # Blank separation line
 leg_elements_3.append(mlines.Line2D([], [], color='gray', marker='o', linestyle='None', markersize=8, markeredgecolor='black', label='Controlled Domain (Solid)'))
 leg_elements_3.append(mlines.Line2D([], [], color='none', marker='o', markerfacecolor='none', linestyle='None', markersize=8, markeredgecolor='gray', markeredgewidth=1.5, label='Generalization Domain (Hollow)'))
-# leg_elements_3.append(zone_patch)
 
 plt.legend(handles=leg_elements_3, bbox_to_anchor=(1.02, 1), loc='upper left', frameon=True)
-plt.title('Latency against Accuracy Matrix of the YOLO + SAM2 Architecture under Hybrid and In-House Training Configurations', pad=12, fontweight='bold')
+
+# Multi-line title adjustment
+plt.title('Latency against Accuracy Matrix of the YOLO + SAM2 Architecture\nunder Hybrid and In-House Training Configurations', pad=12, fontweight='bold')
+
 plt.xlabel('Average Inference Latency (ms)')
 plt.ylabel('Mean Dice Score')
 plt.ylim(-0.05, 1.0)
@@ -245,7 +250,6 @@ plt.close()
 
 # Graph 4: Scatter Matrix - Framework Comparison (4 Models)
 fig, ax4 = plt.subplots(figsize=(11, 5.5))
-# ax4.axvspan(-20, 160, color='gray', alpha=0.15, zorder=1)
 
 # Plot manually to maintain strict color/marker configuration and represent environment cleanly
 for idx, row in grouped_framework.iterrows():
@@ -268,10 +272,12 @@ for model in framework_comparison_models:
 leg_elements_4.append(mlines.Line2D([], [], color='none', linestyle='None', label='')) # Blank separation line
 leg_elements_4.append(mlines.Line2D([], [], color='gray', marker='o', linestyle='None', markersize=8, markeredgecolor='black', label='Controlled Domain (Solid)'))
 leg_elements_4.append(mlines.Line2D([], [], color='none', marker='o', markerfacecolor='none', linestyle='None', markersize=8, markeredgecolor='gray', markeredgewidth=1.5, label='Generalization Domain (Hollow)'))
-# leg_elements_4.append(zone_patch)
 
 plt.legend(handles=leg_elements_4, bbox_to_anchor=(1.02, 1), loc='upper left', frameon=True)
-plt.title('Latency against Accuracy Analysis Comparing the Proposed YOLOv8n + SAM2 Architecture with YOLOv8n + U-Net and Traditional U-Net Baselines', pad=12, fontweight='bold')
+
+# Multi-line title adjustment
+plt.title('Latency against Accuracy Analysis Comparing the Proposed YOLOv8n + SAM2 Architecture\nwith YOLOv8n + U-Net and Traditional U-Net Baselines', pad=12, fontweight='bold')
+
 plt.xlabel('Average Inference Latency (ms)')
 plt.ylabel('Mean Dice Score')
 plt.ylim(-0.05, 0.9)
