@@ -30,7 +30,9 @@ df_sam = pd.read_csv(path_sam_summary)
 df_unet = df_unet.rename(columns={
     'video': 'Video',
     'model': 'Model',
-    'mean_dice': 'Mean Dice'
+    'mean_dice': 'Mean Dice',
+    'mean_fps': 'FPS',
+    'mean_latency_ms': 'Avg Latency (ms)'
 })
 
 # If missing, supply dummy/baseline placeholders for Latency and FPS for U-Net models
